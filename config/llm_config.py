@@ -46,7 +46,7 @@ class LLMConfig(BaseSettings):
     cache_enabled: bool = True
     cache_ttl: int = 300  # seconds
 
-    model_config = {"env_prefix": "LLM_", "env_file": ".env"}
+    model_config = {"env_prefix": "LLM_", "env_file": ".env", "extra": "ignore"}
 
 
 llm_config = LLMConfig()

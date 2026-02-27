@@ -1,8 +1,8 @@
 {
   "servers": {
     "astrafox": {
-      "command": "python",
-      "args": ["-m", "mcp_server.server"],
+      "command": "${workspaceFolder}/ui-intelligence/.venv/bin/python",
+      "args": ["-m", "mcp_server"],
       "cwd": "${workspaceFolder}/ui-intelligence",
       "env": {
         "PYTHONPATH": "${workspaceFolder}/ui-intelligence"

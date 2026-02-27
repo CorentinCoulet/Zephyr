@@ -42,8 +42,7 @@ _cfg = _get_cfg()
 # ─── Server instance ──────────────────────────────────────────
 mcp = FastMCP(
     "Astrafox UI Intelligence",
-    version="0.1.0",
-    description=(
+    instructions=(
         "Analyse visuelle d'interfaces web : screenshots, extraction DOM, "
         "erreurs console, audit performance, accessibilité, régression visuelle. "
         "Donne à Copilot/Claude des yeux sur l'UI.\n"

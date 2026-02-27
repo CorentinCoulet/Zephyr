@@ -74,7 +74,7 @@ class Settings(BaseSettings):
     session_timeout: int = 1800  # 30 min in seconds
     max_sessions: int = 10
 
-    model_config = {"env_prefix": "ASTRAFOX_", "env_file": ".env"}
+    model_config = {"env_prefix": "ASTRAFOX_", "env_file": ".env", "extra": "ignore"}
 
 
 settings = Settings()
