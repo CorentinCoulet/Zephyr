@@ -1,0 +1,36 @@
+# ─── Python ───────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+htmlcov/
+.venv/
+venv/
+
+# ─── Environment / Secrets ────────────────────────────
+.env
+
+# ─── Node / npm ───────────────────────────────────────
+node_modules/
+dist/
+*.tsbuildinfo
+
+# ─── IDE ──────────────────────────────────────────────
+.vscode/*
+!.vscode/mcp.json
+.idea/
+
+# ─── OS ───────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.Zone.Identifier
+
+# ─── Build / Reports ─────────────────────────────────
+reports/
+screenshots/
+baselines/
+
+# ─── Test playground (dev-only) ───────────────────────
+_test_playground/
