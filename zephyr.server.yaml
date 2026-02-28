@@ -12,7 +12,7 @@
 # ── Active LLM Provider ──────────────────────────────────────
 # Which LLM subscription to use for the chat backend.
 # Options: github-copilot | claude | openai | ollama
-provider: openai
+provider: ollama
 
 # ── Server ───────────────────────────────────────────────────
 server:

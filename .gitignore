@@ -34,3 +34,5 @@ baselines/
 
 # ─── Test playground (dev-only) ───────────────────────
 _test_playground/
+packages/zephyr-ui/.npmrc
+.npmrc

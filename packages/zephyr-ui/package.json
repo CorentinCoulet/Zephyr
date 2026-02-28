@@ -1,15 +1,14 @@
 {
-  "name": "@zephyr/ui",
-  "version": "0.1.0",
+  "name": "@zantopia/zephyr-ui",
+  "version": "0.1.2",
   "description": "Zephyr — Embeddable AI assistant widget. Import <Zephyr /> into any React/Vue/JS project.",
   "type": "module",
-  "main": "dist/zephyr.umd.cjs",
-  "module": "dist/zephyr.es.js",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/zephyr.es.js",
-      "require": "./dist/zephyr.umd.cjs",
+      "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
     "./react": {
