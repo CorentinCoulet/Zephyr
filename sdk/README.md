@@ -1,4 +1,4 @@
-# 🦊 @astrafox/widget — Embeddable AI Navigation Assistant
+# 🦊 @zephyr/widget — Embeddable AI Navigation Assistant
 
 Composant réutilisable d'assistant IA pour guider les utilisateurs dans n'importe quelle application web.
 
@@ -7,10 +7,10 @@ Composant réutilisable d'assistant IA pour guider les utilisateurs dans n'impor
 ### Option 1 : Script tag (le plus simple)
 
 ```html
-<script src="https://your-astrafox-server/api/sdk/astrafox-widget.js"></script>
+<script src="https://your-zephyr-server/api/sdk/zephyr-widget.js"></script>
 <script>
-  AstrafoxWidget.init({
-    server: 'https://your-astrafox-server',
+  ZephyrWidget.init({
+    server: 'https://your-zephyr-server',
     persona: 'minimal',
     theme: 'dark',
     position: 'bottom-right',
@@ -23,18 +23,18 @@ Composant réutilisable d'assistant IA pour guider les utilisateurs dans n'impor
 ### Option 2 : npm
 
 ```bash
-npm install @astrafox/widget
+npm install @zephyr/widget
 ```
 
 ## Utilisation React
 
 ```jsx
-import { AstrafoxChat } from '@astrafox/widget/react';
+import { ZephyrChat } from '@zephyr/widget/react';
 
 function App() {
   return (
-    <AstrafoxChat
-      server="https://your-astrafox-server"
+    <ZephyrChat
+      server="https://your-zephyr-server"
       persona="spirit"
       theme="auto"
       position="bottom-right"
@@ -49,8 +49,8 @@ function App() {
 ### Inline (dans un conteneur)
 
 ```jsx
-<AstrafoxChat
-  server="https://your-astrafox-server"
+<ZephyrChat
+  server="https://your-zephyr-server"
   inline
   style={{ height: '500px', width: '100%' }}
 />
@@ -59,10 +59,10 @@ function App() {
 ### Hook impératif
 
 ```jsx
-import { useAstrafox } from '@astrafox/widget/react';
+import { useZephyr } from '@zephyr/widget/react';
 
 function HelpButton() {
-  const { open, send } = useAstrafox();
+  const { open, send } = useZephyr();
   return <button onClick={() => { open(); send("Comment faire X ?"); }}>Aide</button>;
 }
 ```
@@ -71,12 +71,12 @@ function HelpButton() {
 
 ```vue
 <script setup>
-import AstrafoxWidget from '@astrafox/widget/vue';
+import ZephyrWidget from '@zephyr/widget/vue';
 </script>
 
 <template>
-  <AstrafoxWidget
-    server="https://your-astrafox-server"
+  <ZephyrWidget
+    server="https://your-zephyr-server"
     persona="futuristic"
     theme="dark"
     position="bottom-left"
@@ -91,23 +91,23 @@ import AstrafoxWidget from '@astrafox/widget/vue';
 
 ```vue
 <template>
-  <AstrafoxWidget
-    ref="astrafox"
+  <ZephyrWidget
+    ref="zephyr"
     server="..."
     :inline="true"
     style="height: 500px"
   />
-  <button @click="$refs.astrafox.send('Bonjour')">Envoyer</button>
+  <button @click="$refs.zephyr.send('Bonjour')">Envoyer</button>
 </template>
 ```
 
 ## Utilisation Vanilla JS (Web Component / n'importe quel framework)
 
 ```js
-import { AstrafoxWidget } from '@astrafox/widget';
+import { ZephyrWidget } from '@zephyr/widget';
 
-const widget = AstrafoxWidget.init({
-  server: 'https://your-astrafox-server',
+const widget = ZephyrWidget.init({
+  server: 'https://your-zephyr-server',
   persona: 'mascot',
   theme: 'light',
   position: 'bottom-right',
@@ -126,7 +126,7 @@ widget.destroy();
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
-| `server` | string | **required** | URL du serveur Astrafox |
+| `server` | string | **required** | URL du serveur Zephyr |
 | `apiKey` | string | `""` | Clé API pour l'authentification |
 | `persona` | string | `"minimal"` | `"mascot"` \| `"spirit"` \| `"minimal"` \| `"futuristic"` \| URL image custom |
 | `theme` | string | `"dark"` | `"dark"` \| `"light"` \| `"auto"` |
@@ -147,14 +147,14 @@ widget.destroy();
 
 | ID | Style | Description |
 |---|---|---|
-| `mascot` | Mascotte complète | Renard Astrafox avec moustaches, détails complets |
+| `mascot` | Mascotte complète | Renard Zephyr avec moustaches, détails complets |
 | `spirit` | Esprit flottant | Version éthérée avec glow radial |
 | `minimal` | Ultra minimal SaaS | Fond arrondi, traits simples |
 | `futuristic` | Futuriste | Dégradé, yeux rectangulaires, point lumineux |
 
 Vous pouvez aussi passer une **URL d'image** pour un persona custom :
 ```js
-AstrafoxWidget.init({
+ZephyrWidget.init({
   server: '...',
   persona: 'https://example.com/my-custom-avatar.svg',
 });

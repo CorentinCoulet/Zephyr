@@ -92,9 +92,9 @@ class ConsoleCapture:
         """Inject a script to capture unhandled promise rejections."""
         await page.evaluate("""
             () => {
-                window.__astrafox_rejections = [];
+                window.__zephyr_rejections = [];
                 window.addEventListener('unhandledrejection', (event) => {
-                    window.__astrafox_rejections.push({
+                    window.__zephyr_rejections.push({
                         message: event.reason?.message || String(event.reason),
                         stack: event.reason?.stack || ''
                     });
@@ -105,7 +105,7 @@ class ConsoleCapture:
     async def collect_rejections(self, page: Page) -> list[CapturedError]:
         """Collect any unhandled promise rejections captured so far."""
         rejections = await page.evaluate("""
-            () => window.__astrafox_rejections || []
+            () => window.__zephyr_rejections || []
         """)
         errors = []
         for r in rejections:

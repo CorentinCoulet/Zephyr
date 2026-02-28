@@ -1,7 +1,7 @@
 import React from "react";
 
-export interface AstrafoxChatProps {
-  /** Astrafox backend server URL */
+export interface ZephyrChatProps {
+  /** Zephyr backend server URL */
   server: string;
   /** API key */
   apiKey?: string;
@@ -45,11 +45,11 @@ export interface AstrafoxChatProps {
   onToggle?: (isOpen: boolean) => void;
 }
 
-export declare function AstrafoxChat(props: AstrafoxChatProps): React.ReactElement | null;
-export declare function useAstrafox(): {
+export declare function ZephyrChat(props: ZephyrChatProps): React.ReactElement | null;
+export declare function useZephyr(): {
   send: (text: string) => void;
   open: () => void;
   close: () => void;
 };
 
-export default AstrafoxChat;
+export default ZephyrChat;

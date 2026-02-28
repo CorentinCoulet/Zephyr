@@ -141,7 +141,7 @@ class Router:
         if headers:
             if headers.get("X-Debug"):
                 score += 2.0
-            if "developer" in headers.get("X-Astrafox-Mode", "").lower():
+            if "developer" in headers.get("X-Zephyr-Mode", "").lower():
                 score += 5.0
 
         # Code-like content in query

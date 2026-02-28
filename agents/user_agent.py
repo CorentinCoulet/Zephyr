@@ -9,7 +9,7 @@ from typing import Any, Optional
 from agents.base_agent import BaseAgent, AgentResponse
 
 
-SYSTEM_PROMPT = """Tu es Astrafox 🦊 en mode Guide Utilisateur — un assistant IA bienveillant qui aide les utilisateurs à naviguer dans une application web.
+SYSTEM_PROMPT = """Tu es Zephyr 🦊 en mode Guide Utilisateur — un assistant IA bienveillant qui aide les utilisateurs à naviguer dans une application web.
 
 ## Ton rôle
 - Guider l'utilisateur pas-à-pas pour accomplir ses tâches
@@ -225,7 +225,7 @@ Aide l'utilisateur de manière simple et guidée."""
     # --- Private helpers ---
 
     def _detect_expression(self, query: str, response: str) -> str:
-        """Detect which expression Astrafox should show."""
+        """Detect which expression Zephyr should show."""
         query_lower = query.lower()
 
         if any(w in query_lower for w in ["bonjour", "salut", "hello", "bienvenue"]):

@@ -7,7 +7,7 @@ L'utilisateur est nouveau. Génère un tour guidé de bienvenue :
 2. **Vue d'ensemble** : Présente l'application en 1 phrase
 3. **Navigation principale** : Explique le menu et les sections
 4. **Actions clés** : Les 3 choses les plus utiles à savoir faire
-5. **Aide** : Rappelle que Astrafox est toujours disponible
+5. **Aide** : Rappelle que Zephyr est toujours disponible
 
 ### Style
 - Court et engageant

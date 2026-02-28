@@ -1,9 +1,9 @@
 """
-Base Agent — Abstract base class for all Astrafox AI agents.
+Base Agent — Abstract base class for all Zephyr AI agents.
 Provides common LLM interaction, context management, and reporting.
 
 Uses the provider system from config/providers.py which reads
-astrafox.server.yaml for LLM configuration.
+zephyr.server.yaml for LLM configuration.
 """
 
 import time
@@ -14,7 +14,7 @@ from typing import Any, Optional
 
 import httpx
 
-# New provider system (reads astrafox.server.yaml)
+# New provider system (reads zephyr.server.yaml)
 from config.providers import get_provider, get_server_config, LLMProviderBase
 
 # Backward compat: still importable but no longer used internally
@@ -44,7 +44,7 @@ class AgentResponse:
     message: str
     data: dict = field(default_factory=dict)
     suggestions: list[str] = field(default_factory=list)
-    expression: str = "neutral"  # Astrafox expression to display
+    expression: str = "neutral"  # Zephyr expression to display
     session_id: str = ""
 
     def to_dict(self) -> dict:
@@ -59,7 +59,7 @@ class AgentResponse:
 
 
 class BaseAgent(ABC):
-    """Abstract base class for Astrafox AI agents."""
+    """Abstract base class for Zephyr AI agents."""
 
     agent_name: str = "base"
     agent_mode: str = "generic"  # "dev" or "user"
@@ -125,7 +125,7 @@ class BaseAgent(ABC):
         Call the configured LLM provider.
 
         Uses the provider system from config/providers.py which reads
-        astrafox.server.yaml. Supports: github-copilot, claude, openai, ollama.
+        zephyr.server.yaml. Supports: github-copilot, claude, openai, ollama.
         """
         return await self._provider.chat(
             messages,

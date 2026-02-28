@@ -1,16 +1,16 @@
-# 🦊 Astrafox — Universal UI Intelligence Platform
+# 🦊 Zephyr — Universal UI Intelligence Platform
 
 Plateforme d'intelligence artificielle pour l'analyse, le debug et la navigation assistée d'interfaces web.
 
 **Deux modes d'utilisation :**
-- **Mode User** → Package `@astrafox/ui` — composant `<Astrafox />` intégrable dans React, Vue ou vanilla JS
+- **Mode User** → Package `@zephyr/ui` — composant `<Zephyr />` intégrable dans React, Vue ou vanilla JS
 - **Mode Dev** → Serveur MCP pour GitHub Copilot / Claude — donne des "yeux" sur l'UI directement dans l'IDE
 
 ## Installation
 
 ```bash
 # Frontend — Plugin widget
-npm install @astrafox/ui
+npm install @zephyr/ui
 
 # Backend — Serveur Python
 pip install -r requirements.txt
@@ -18,16 +18,16 @@ pip install -r requirements.txt
 
 ## Quick Start
 
-### 1. Configurer le frontend (`astrafox.config.ts`)
+### 1. Configurer le frontend (`zephyr.config.ts`)
 
 ```ts
-import { defineAstrafoxConfig } from '@astrafox/ui/config';
+import { defineZephyrConfig } from '@zephyr/ui/config';
 
-export default defineAstrafoxConfig({
+export default defineZephyrConfig({
   server: 'http://localhost:8000',
   theme: 'dark',
   persona: 'friendly',
-  logo: 'astrafox-default',
+  logo: 'zephyr-default',
   accentColor: '#ff6b35',
   openAnimation: 'slide-up',
 });
@@ -37,26 +37,26 @@ export default defineAstrafoxConfig({
 
 **React :**
 ```tsx
-import { Astrafox } from '@astrafox/ui/react';
-import config from './astrafox.config';
+import { Zephyr } from '@zephyr/ui/react';
+import config from './zephyr.config';
 
 function App() {
-  return <Astrafox config={config} />;
+  return <Zephyr config={config} />;
 }
 ```
 
 **Vue 3 :**
 ```vue
 <script setup>
-import { Astrafox } from '@astrafox/ui/vue';
-import config from './astrafox.config';
+import { Zephyr } from '@zephyr/ui/vue';
+import config from './zephyr.config';
 </script>
 <template>
-  <Astrafox :config="config" />
+  <Zephyr :config="config" />
 </template>
 ```
 
-### 3. Configurer le backend (`astrafox.server.yaml`)
+### 3. Configurer le backend (`zephyr.server.yaml`)
 
 ```yaml
 provider: openai          # github-copilot | claude | openai | ollama
@@ -76,13 +76,13 @@ uvicorn api.server:app --reload --port 8000
 
 ```
 ┌─── Projet cible (React, Vue, Angular…) ───┐
-│  import { Astrafox } from '@astrafox/ui'     │  ← @astrafox/ui package
-│  <Astrafox config={...} />                  │
+│  import { Zephyr } from '@zephyr/ui'     │  ← @zephyr/ui package
+│  <Zephyr config={...} />                  │
 └──────────────────┬─────────────────────────┘
                    │ WebSocket
 ┌──────────────────┴─────────────────────────┐
 │           FastAPI (api/server.py)           │
-│  astrafox.server.yaml → Provider config     │
+│  zephyr.server.yaml → Provider config     │
 │  /ws/chat      /api/status                 │
 └──────┬──────────────────────────┬──────────┘
        │                          │
@@ -126,7 +126,7 @@ uvicorn api.server:app --reload --port 8000
 - Détection de friction (dead clicks, rage clicks)
 - Mode inline ou floating
 
-### 🦊 Astrafox (Persona)
+### 🦊 Zephyr (Persona)
 - Avatar SVG animé avec 7 expressions (neutral, happy, surprised, thinking, helping, speaking, wink)
 - Thème dark/light avec variables CSS
 - Réponses en Markdown avec coloration syntaxique
@@ -165,7 +165,7 @@ pip install -r requirements.txt
 playwright install chromium
 
 # Frontend
-cd astrafox_ui
+cd zephyr_ui
 npm install
 npm run build
 cd ..
@@ -227,7 +227,7 @@ playwright install chromium
 ```json
 {
   "servers": {
-    "astrafox": {
+    "zephyr": {
       "command": "python",
       "args": ["-m", "mcp_server.server"],
       "cwd": "/chemin/vers/ui-intelligence"
@@ -236,7 +236,7 @@ playwright install chromium
 }
 ```
 
-3. Relancer VS Code — Astrafox apparaît dans les outils MCP disponibles.
+3. Relancer VS Code — Zephyr apparaît dans les outils MCP disponibles.
 
 ### Outils MCP disponibles
 
@@ -279,10 +279,10 @@ Widget AI insérable en une ligne dans n'importe quel projet web.
 ### Intégration rapide (script tag)
 
 ```html
-<script src="https://your-astrafox-server/api/sdk/astrafox-widget.js"></script>
+<script src="https://your-zephyr-server/api/sdk/zephyr-widget.js"></script>
 <script>
-  AstrafoxWidget.init({
-    server: 'https://your-astrafox-server',
+  ZephyrWidget.init({
+    server: 'https://your-zephyr-server',
     persona: 'minimal',      // mascot | spirit | minimal | futuristic
     theme: 'auto',
     position: 'bottom-right',
@@ -293,17 +293,17 @@ Widget AI insérable en une ligne dans n'importe quel projet web.
 
 ### React
 ```jsx
-import { AstrafoxChat } from '@astrafox/widget/react';
-<AstrafoxChat server="https://..." persona="spirit" theme="dark" />
+import { ZephyrChat } from '@zephyr/widget/react';
+<ZephyrChat server="https://..." persona="spirit" theme="dark" />
 ```
 
 ### Vue 3
 ```vue
 <script setup>
-import AstrafoxWidget from '@astrafox/widget/vue';
+import ZephyrWidget from '@zephyr/widget/vue';
 </script>
 <template>
-  <AstrafoxWidget server="https://..." persona="futuristic" theme="dark" />
+  <ZephyrWidget server="https://..." persona="futuristic" theme="dark" />
 </template>
 ```
 
@@ -358,14 +358,14 @@ ui-intelligence/
 │   ├── __main__.py            # python -m mcp_server
 │   └── requirements.txt
 ├── sdk/                       # 👤 Widget SDK embedable
-│   ├── astrafox-widget.js      # Core widget (vanilla JS, ~500 lignes)
-│   ├── react/index.jsx        # React wrapper <AstrafoxChat />
-│   ├── vue/AstrafoxWidget.vue  # Vue 3 wrapper
+│   ├── zephyr-widget.js      # Core widget (vanilla JS, ~500 lignes)
+│   ├── react/index.jsx        # React wrapper <ZephyrChat />
+│   ├── vue/ZephyrWidget.vue  # Vue 3 wrapper
 │   ├── index.d.ts             # TypeScript types
 │   └── README.md              # Documentation SDK
-├── astrafox_ui/                # Frontend admin Vue 3
+├── zephyr_ui/                # Frontend admin Vue 3
 │   ├── src/
-│   │   ├── components/        # AstrafoxAvatar, Chat, etc.
+│   │   ├── components/        # ZephyrAvatar, Chat, etc.
 │   │   ├── stores/            # Pinia stores
 │   │   ├── views/             # ChatView, Dashboard
 │   │   └── styles/            # Tailwind + thèmes

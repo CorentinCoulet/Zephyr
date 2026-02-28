@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from typing import Any, Optional
 
 
-class AstrafoxResponse(BaseModel):
+class ZephyrResponse(BaseModel):
     """Standard response wrapper."""
     success: bool = True
     message: str = ""

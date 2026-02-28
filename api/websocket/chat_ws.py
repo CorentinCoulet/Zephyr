@@ -1,5 +1,5 @@
 """
-WebSocket endpoint for real-time chat with Astrafox.
+WebSocket endpoint for real-time chat with Zephyr.
 Supports both Dev and User agent modes with automatic routing.
 """
 
@@ -38,7 +38,7 @@ manager = ConnectionManager()
 
 @router.websocket("/ws/chat")
 async def websocket_chat(websocket: WebSocket):
-    """WebSocket endpoint for real-time chat with Astrafox."""
+    """WebSocket endpoint for real-time chat with Zephyr."""
 
     session_id = websocket.query_params.get("session_id", str(uuid.uuid4()))
     await manager.connect(websocket, session_id)
@@ -57,7 +57,7 @@ async def websocket_chat(websocket: WebSocket):
     await manager.send_json(session_id, {
         "type": "welcome",
         "session_id": session_id,
-        "message": "Bonjour ! Je suis Astrafox 🦊 — Comment puis-je vous aider ?",
+        "message": "Bonjour ! Je suis Zephyr 🦊 — Comment puis-je vous aider ?",
         "expression": "happy",
         "mode": session.mode,
     })

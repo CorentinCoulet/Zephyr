@@ -5,7 +5,7 @@ Debug endpoints — Dev Agent interactions.
 from fastapi import APIRouter, Request
 
 from api.models.requests import DebugRequest, DiffRequest, ChatRequest
-from api.models.responses import DebugResponse, DiffResponse, AstrafoxResponse
+from api.models.responses import DebugResponse, DiffResponse, ZephyrResponse
 from orchestrator.router import AgentTarget
 
 router = APIRouter()
@@ -88,7 +88,7 @@ async def visual_diff(req: DiffRequest, request: Request):
     )
 
 
-@router.post("/chat/dev", response_model=AstrafoxResponse)
+@router.post("/chat/dev", response_model=ZephyrResponse)
 async def chat_dev(req: ChatRequest, request: Request):
     """Send a message to the Dev Agent."""
     dev_agent = request.app.state.dev_agent
@@ -114,7 +114,7 @@ async def chat_dev(req: ChatRequest, request: Request):
     session.add_message("user", req.message)
     session.add_message("assistant", response.message)
 
-    return AstrafoxResponse(
+    return ZephyrResponse(
         success=response.success,
         message=response.message,
         data=response.data,

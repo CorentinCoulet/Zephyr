@@ -1,5 +1,5 @@
 """
-LLM provider configuration for Astrafox Intelligence Platform.
+LLM provider configuration for Zephyr Intelligence Platform.
 Supports OpenAI, Anthropic, Ollama, and local models.
 """
 

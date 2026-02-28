@@ -1,5 +1,5 @@
 """
-Astrafox Intelligence Platform — Main API Server.
+Zephyr Intelligence Platform — Main API Server.
 FastAPI application with REST endpoints and WebSocket support.
 """
 
@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
-    description="🦊 Astrafox — Universal UI Intelligence Platform",
+    description="🦊 Zephyr — Universal UI Intelligence Platform",
     lifespan=lifespan,
 )
 
@@ -72,8 +72,8 @@ app.include_router(reports_router, prefix="/api", tags=["Reports"])
 app.include_router(widget_router, prefix="/api", tags=["Widget SDK"])
 app.include_router(ws_router, tags=["WebSocket"])
 
-# --- Static files (Astrafox UI) ---
-ui_dist = Path(__file__).parent.parent / "astrafox_ui" / "dist"
+# --- Static files (Zephyr UI) ---
+ui_dist = Path(__file__).parent.parent / "zephyr_ui" / "dist"
 if ui_dist.exists():
     app.mount("/", StaticFiles(directory=str(ui_dist), html=True), name="ui")
 
@@ -96,8 +96,8 @@ async def status():
         "status": "running",
         "active_sessions": app.state.session_manager.get_session_count(),
         "target_url": settings.target_url,
-        "theme": settings.astrafox_theme.value,
-        "astrafox_version": settings.astrafox_version.value,
+        "theme": settings.zephyr_theme.value,
+        "zephyr_version": settings.zephyr_version.value,
         "llm_provider": server_config.provider,
         "llm_model": server_config.model,
     }

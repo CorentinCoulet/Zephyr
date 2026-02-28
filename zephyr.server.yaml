@@ -1,0 +1,102 @@
+# ============================================
+# 🦊 Zephyr Server Configuration
+# ============================================
+# This file configures the Zephyr backend server.
+# Place it at the root of your project.
+#
+# Two modes:
+#   - user:  Chat widget LLM (navigation help, no code access)
+#   - dev:   MCP tools + debug agent (full UI analysis via IDE)
+# ============================================
+
+# ── Active LLM Provider ──────────────────────────────────────
+# Which LLM subscription to use for the chat backend.
+# Options: github-copilot | claude | openai | ollama
+provider: openai
+
+# ── Server ───────────────────────────────────────────────────
+server:
+  host: 0.0.0.0
+  port: 8000
+  debug: false
+  cors_origins:
+    - "*"
+
+# ── Target Site ──────────────────────────────────────────────
+target:
+  url: http://localhost:3000   # URL of the site Zephyr analyzes
+  browser_headless: true
+  browser_timeout: 30000       # ms
+
+# ── Provider Configurations ──────────────────────────────────
+# Only the active provider (set above) is used at runtime.
+# Configure each provider you might use.
+
+github-copilot:
+  # Uses GitHub Models API (OpenAI-compatible)
+  # Requires a GitHub Personal Access Token with Copilot access
+  # Set GITHUB_TOKEN env var or paste here
+  token: ${GITHUB_TOKEN}
+  model: gpt-4o
+  # Available models: gpt-4o, gpt-4o-mini, o3-mini, claude-sonnet-4-20250514 (via GitHub)
+  endpoint: https://models.inference.ai.azure.com
+  max_tokens: 4096
+  temperature: 0.3
+
+claude:
+  # Anthropic Claude API — requires Claude / Claude Code subscription
+  # Set ANTHROPIC_API_KEY env var or paste here
+  api_key: ${ANTHROPIC_API_KEY}
+  model: claude-sonnet-4-20250514
+  max_tokens: 4096
+  temperature: 0.3
+
+openai:
+  # OpenAI API — requires OpenAI subscription
+  # Set OPENAI_API_KEY env var or paste here
+  api_key: ${OPENAI_API_KEY}
+  model: gpt-4o
+  fallback_model: gpt-4o-mini
+  max_tokens: 4096
+  temperature: 0.3
+
+ollama:
+  # Ollama local inference — free, runs on your machine
+  # Install: https://ollama.ai
+  base_url: http://localhost:11434
+  model: llama3
+  max_tokens: 4096
+  temperature: 0.3
+
+# ── Dev Mode (MCP) ───────────────────────────────────────────
+# The MCP server exposes Zephyr tools to your IDE (Copilot, Claude Code).
+# The IDE's own LLM calls these tools — no separate LLM config needed.
+# Configure MCP in .vscode/mcp.json or your IDE settings.
+dev:
+  enabled: true
+  # Which tools to expose via MCP
+  tools:
+    - screenshot
+    - dom_extract
+    - console_errors
+    - performance_audit
+    - accessibility_check
+    - visual_diff
+    - responsive_check
+    - full_analysis
+    - suggest_fix
+  # Screenshots directory
+  screenshots_dir: reports/screenshots
+  # Auto-launch browser for dev mode
+  auto_browser: true
+
+# ── Sessions ─────────────────────────────────────────────────
+sessions:
+  timeout: 1800          # seconds (30 min)
+  max_concurrent: 50
+
+# ── Rate Limiting ────────────────────────────────────────────
+rate_limit:
+  max_requests_per_minute: 30
+  cache_enabled: true
+  cache_ttl: 300         # seconds

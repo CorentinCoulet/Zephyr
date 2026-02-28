@@ -1,15 +1,15 @@
 {
-  "name": "@astrafox/widget",
+  "name": "@zephyr/widget",
   "version": "0.1.0",
-  "description": "Astrafox AI Navigation Assistant — Embeddable widget for any web project",
+  "description": "Zephyr AI Navigation Assistant — Embeddable widget for any web project",
   "type": "module",
-  "main": "dist/astrafox-widget.umd.js",
-  "module": "dist/astrafox-widget.es.js",
+  "main": "dist/zephyr-widget.umd.js",
+  "module": "dist/zephyr-widget.es.js",
   "types": "dist/types/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/astrafox-widget.es.js",
-      "require": "./dist/astrafox-widget.umd.js",
+      "import": "./dist/zephyr-widget.es.js",
+      "require": "./dist/zephyr-widget.umd.js",
       "types": "./dist/types/index.d.ts"
     },
     "./react": {
@@ -17,7 +17,7 @@
       "types": "./react/index.d.ts"
     },
     "./vue": {
-      "import": "./vue/AstrafoxWidget.vue"
+      "import": "./vue/ZephyrWidget.vue"
     }
   },
   "files": [
@@ -40,6 +40,6 @@
     "react-dom": { "optional": true },
     "vue": { "optional": true }
   },
-  "keywords": ["astrafox", "ai", "widget", "assistant", "navigation", "ux"],
+  "keywords": ["zephyr", "ai", "widget", "assistant", "navigation", "ux"],
   "license": "MIT"
 }

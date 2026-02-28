@@ -1,8 +1,8 @@
 """
-🦊 Astrafox — LLM Provider System
+🦊 Zephyr — LLM Provider System
 
 Unified provider interface for multiple LLM backends.
-Reads configuration from astrafox.server.yaml and environment variables.
+Reads configuration from zephyr.server.yaml and environment variables.
 
 Supported providers:
   - github-copilot  (GitHub Models API, OpenAI-compatible)
@@ -75,27 +75,27 @@ class ServerConfig:
 
 def load_server_config(path: Optional[str] = None) -> ServerConfig:
     """
-    Load astrafox.server.yaml configuration.
+    Load zephyr.server.yaml configuration.
 
     Search order:
       1. Explicit path argument
-      2. ASTRAFOX_CONFIG env var
-      3. ./astrafox.server.yaml (cwd)
-      4. ../astrafox.server.yaml (parent)
+      2. ZEPHYR_CONFIG env var
+      3. ./zephyr.server.yaml (cwd)
+      4. ../zephyr.server.yaml (parent)
     """
     search_paths = []
 
     if path:
         search_paths.append(Path(path))
 
-    env_path = os.environ.get("ASTRAFOX_CONFIG")
+    env_path = os.environ.get("ZEPHYR_CONFIG")
     if env_path:
         search_paths.append(Path(env_path))
 
     search_paths.extend([
-        Path.cwd() / "astrafox.server.yaml",
-        Path.cwd().parent / "astrafox.server.yaml",
-        Path(__file__).parent.parent / "astrafox.server.yaml",
+        Path.cwd() / "zephyr.server.yaml",
+        Path.cwd().parent / "zephyr.server.yaml",
+        Path(__file__).parent.parent / "zephyr.server.yaml",
     ])
 
     config_path = None

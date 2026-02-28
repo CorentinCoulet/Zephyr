@@ -5,7 +5,7 @@ Analyze endpoints — URL analysis, screenshots, and audits.
 from fastapi import APIRouter, Request
 
 from api.models.requests import AnalyzeRequest, ScreenshotRequest, SetBaselineRequest
-from api.models.responses import AnalyzeResponse, ScreenshotResponse, AstrafoxResponse
+from api.models.responses import AnalyzeResponse, ScreenshotResponse, ZephyrResponse
 from core.browser_engine import VIEWPORTS
 
 router = APIRouter()
@@ -80,7 +80,7 @@ async def capture_screenshots(req: ScreenshotRequest, request: Request):
     )
 
 
-@router.post("/baseline", response_model=AstrafoxResponse)
+@router.post("/baseline", response_model=ZephyrResponse)
 async def set_baseline(req: SetBaselineRequest, request: Request):
     """Capture and store a visual baseline for regression testing."""
     browser = request.app.state.context_builder.browser
@@ -95,7 +95,7 @@ async def set_baseline(req: SetBaselineRequest, request: Request):
     differ = VisualDiff()
     path = differ.capture_baseline(screenshot_bytes, req.name, req.viewport)
 
-    return AstrafoxResponse(
+    return ZephyrResponse(
         success=True,
         message=f"Baseline '{req.name}' saved at {path}",
         data={"path": path, "name": req.name, "viewport": req.viewport},

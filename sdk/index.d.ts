@@ -1,9 +1,9 @@
 /**
- * @astrafox/widget — TypeScript type definitions
+ * @zephyr/widget — TypeScript type definitions
  */
 
-export interface AstrafoxWidgetOptions {
-  /** URL of the Astrafox backend server */
+export interface ZephyrWidgetOptions {
+  /** URL of the Zephyr backend server */
   server: string;
   /** API key for authentication (optional) */
   apiKey?: string;
@@ -41,13 +41,13 @@ export interface AstrafoxWidgetOptions {
   customCSS?: string;
 
   // Callbacks
-  onReady?: (widget: AstrafoxWidgetInstance) => void;
+  onReady?: (widget: ZephyrWidgetInstance) => void;
   onMessage?: (msg: { role: string; text: string; expression: string }) => void;
   onError?: (err: { message: string }) => void;
   onToggle?: (isOpen: boolean) => void;
 }
 
-export interface AstrafoxWidgetInstance {
+export interface ZephyrWidgetInstance {
   mount(container?: string | HTMLElement | null): void;
   destroy(): void;
   open(): void;
@@ -64,13 +64,13 @@ export interface AstrafoxWidgetInstance {
   readonly expression: string;
 }
 
-export interface AstrafoxWidgetStatic {
-  init(options: AstrafoxWidgetOptions): AstrafoxWidgetInstance;
-  getInstance(): AstrafoxWidgetInstance | null;
-  Widget: new (options: AstrafoxWidgetOptions) => AstrafoxWidgetInstance;
+export interface ZephyrWidgetStatic {
+  init(options: ZephyrWidgetOptions): ZephyrWidgetInstance;
+  getInstance(): ZephyrWidgetInstance | null;
+  Widget: new (options: ZephyrWidgetOptions) => ZephyrWidgetInstance;
   PERSONAS: Record<string, { svg: (accent: string) => string }>;
   THEMES: Record<string, Record<string, string>>;
 }
 
-declare const AstrafoxWidget: AstrafoxWidgetStatic;
-export default AstrafoxWidget;
+declare const ZephyrWidget: ZephyrWidgetStatic;
+export default ZephyrWidget;

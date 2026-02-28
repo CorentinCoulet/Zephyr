@@ -10,7 +10,7 @@ from typing import Any, Optional
 from agents.base_agent import BaseAgent, AgentResponse
 
 
-SYSTEM_PROMPT = """Tu es Astrafox 🦊 en mode Développeur — un assistant IA expert en debug et audit technique pour projets web.
+SYSTEM_PROMPT = """Tu es Zephyr 🦊 en mode Développeur — un assistant IA expert en debug et audit technique pour projets web.
 
 ## Ton rôle
 - Analyser les erreurs JavaScript, logs console, et erreurs réseau
@@ -222,7 +222,7 @@ Analyse ces informations et fournis un diagnostic complet."""
     # --- Private helpers ---
 
     def _detect_expression(self, response: str, context: dict) -> str:
-        """Detect which Astrafox expression to show based on results."""
+        """Detect which Zephyr expression to show based on results."""
         issues = self._count_issues(context)
         lower_response = response.lower()
 

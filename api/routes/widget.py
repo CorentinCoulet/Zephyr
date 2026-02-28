@@ -14,10 +14,10 @@ router = APIRouter()
 SDK_DIR = Path(__file__).parent.parent.parent / "sdk"
 
 
-@router.get("/sdk/astrafox-widget.js")
+@router.get("/sdk/zephyr-widget.js")
 async def serve_widget_js():
     """Serve the embeddable widget JavaScript file."""
-    path = SDK_DIR / "astrafox-widget.js"
+    path = SDK_DIR / "zephyr-widget.js"
     if not path.exists():
         raise HTTPException(404, "Widget SDK not found")
     return FileResponse(
@@ -35,10 +35,10 @@ async def widget_snippet():
     base = settings.widget_base_url or f"http://{settings.host}:{settings.port}"
     api_key = settings.widget_api_key or ""
 
-    html = f"""<!-- 🦊 Astrafox Widget -->
-<script src="{base}/api/sdk/astrafox-widget.js"></script>
+    html = f"""<!-- 🦊 Zephyr Widget -->
+<script src="{base}/api/sdk/zephyr-widget.js"></script>
 <script>
-  AstrafoxWidget.init({{
+  ZephyrWidget.init({{
     server: '{base}',
     apiKey: '{api_key}',
     persona: 'minimal',     // "mascot" | "spirit" | "minimal" | "futuristic"

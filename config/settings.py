@@ -1,5 +1,5 @@
 """
-Global configuration for Astrafox Intelligence Platform.
+Global configuration for Zephyr Intelligence Platform.
 Reads from environment variables with sensible defaults.
 """
 
@@ -9,12 +9,12 @@ from typing import Optional
 from enum import Enum
 
 
-class AstrafoxTheme(str, Enum):
+class ZephyrTheme(str, Enum):
     DARK = "dark"
     LIGHT = "light"
 
 
-class AstrafoxVersion(int, Enum):
+class ZephyrVersion(int, Enum):
     MASCOT = 1
     SPIRIT = 2
     MINIMAL = 3
@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     """Main application settings."""
 
     # --- App ---
-    app_name: str = "Astrafox Intelligence Platform"
+    app_name: str = "Zephyr Intelligence Platform"
     app_version: str = "0.1.0"
     debug: bool = False
     host: str = "0.0.0.0"
@@ -44,9 +44,9 @@ class Settings(BaseSettings):
         description="Default URL of the project to analyze",
     )
 
-    # --- Astrafox UI ---
-    astrafox_theme: AstrafoxTheme = AstrafoxTheme.DARK
-    astrafox_version: AstrafoxVersion = AstrafoxVersion.MASCOT
+    # --- Zephyr UI ---
+    zephyr_theme: ZephyrTheme = ZephyrTheme.DARK
+    zephyr_version: ZephyrVersion = ZephyrVersion.MASCOT
     default_mode: AgentMode = AgentMode.AUTO
 
     # --- Browser ---
@@ -74,7 +74,7 @@ class Settings(BaseSettings):
     session_timeout: int = 1800  # 30 min in seconds
     max_sessions: int = 10
 
-    model_config = {"env_prefix": "ASTRAFOX_", "env_file": ".env", "extra": "ignore"}
+    model_config = {"env_prefix": "ZEPHYR_", "env_file": ".env", "extra": "ignore"}
 
 
 settings = Settings()

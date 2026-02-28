@@ -5,7 +5,7 @@ Guide endpoints — User Agent interactions.
 from fastapi import APIRouter, Request
 
 from api.models.requests import GuideRequest, ChatRequest
-from api.models.responses import GuideResponse, AstrafoxResponse
+from api.models.responses import GuideResponse, ZephyrResponse
 
 router = APIRouter()
 
@@ -101,7 +101,7 @@ async def find_feature(req: GuideRequest, request: Request):
     )
 
 
-@router.post("/chat/user", response_model=AstrafoxResponse)
+@router.post("/chat/user", response_model=ZephyrResponse)
 async def chat_user(req: ChatRequest, request: Request):
     """Send a message to the User Agent."""
     user_agent = request.app.state.user_agent
@@ -124,7 +124,7 @@ async def chat_user(req: ChatRequest, request: Request):
     session.add_message("user", req.message)
     session.add_message("assistant", response.message)
 
-    return AstrafoxResponse(
+    return ZephyrResponse(
         success=response.success,
         message=response.message,
         data=response.data,

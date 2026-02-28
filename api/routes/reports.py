@@ -5,7 +5,7 @@ Reports endpoints — Session history, report export.
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from api.models.responses import AstrafoxResponse
+from api.models.responses import ZephyrResponse
 
 router = APIRouter()
 
@@ -47,7 +47,7 @@ async def delete_session(session_id: str, request: Request):
     dev_agent.clear_session(session_id)
     user_agent.clear_session(session_id)
 
-    return AstrafoxResponse(
+    return ZephyrResponse(
         success=True,
         message=f"Session {session_id} deleted",
         expression="neutral",

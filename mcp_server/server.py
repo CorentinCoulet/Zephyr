@@ -1,5 +1,5 @@
 """
-🦊 Astrafox MCP Server — Model Context Protocol server for IDE integration.
+🦊 Zephyr MCP Server — Model Context Protocol server for IDE integration.
 
 Exposes UI analysis tools (screenshot, DOM, console, performance, accessibility,
 visual diff) as MCP tools that can be called by GitHub Copilot / Claude
@@ -11,7 +11,7 @@ Usage:
 Configure in VS Code settings.json or .vscode/mcp.json:
   {
     "servers": {
-      "astrafox": {
+      "zephyr": {
         "command": "python",
         "args": ["-m", "mcp_server.server"],
         "cwd": "/path/to/ui-intelligence"
@@ -41,7 +41,7 @@ _cfg = _get_cfg()
 
 # ─── Server instance ──────────────────────────────────────────
 mcp = FastMCP(
-    "Astrafox UI Intelligence",
+    "Zephyr UI Intelligence",
     instructions=(
         "Analyse visuelle d'interfaces web : screenshots, extraction DOM, "
         "erreurs console, audit performance, accessibilité, régression visuelle. "
@@ -676,11 +676,11 @@ async def interact_with_page(
 # RESOURCE: project info
 # ═══════════════════════════════════════════════════════════════
 
-@mcp.resource("astrafox://info")
+@mcp.resource("zephyr://info")
 def get_info() -> str:
-    """Returns information about the Astrafox MCP server and available tools."""
+    """Returns information about the Zephyr MCP server and available tools."""
     return json.dumps({
-        "name": "Astrafox UI Intelligence",
+        "name": "Zephyr UI Intelligence",
         "version": "0.1.0",
         "description": (
             "Serveur MCP donnant à Copilot/Claude un accès visuel aux interfaces web. "

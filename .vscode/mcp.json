@@ -1,9 +1,9 @@
 {
   "servers": {
-    "astrafox": {
+    "zephyr": {
+      "type": "stdio",
       "command": "${workspaceFolder}/ui-intelligence/.venv/bin/python",
       "args": ["-m", "mcp_server"],
-      "cwd": "${workspaceFolder}/ui-intelligence",
       "env": {
         "PYTHONPATH": "${workspaceFolder}/ui-intelligence"
       }
