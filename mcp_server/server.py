@@ -376,10 +376,10 @@ async def audit_performance(url: str) -> str:
 async def check_accessibility(url: str) -> str:
     """
     Check a page for accessibility issues: WCAG contrast violations,
-    overflow problems, missing alt text, form labels, etc.
+    overflow problems, missing alt text, form labels, ARIA issues, tabindex, lang.
 
-    Returns a list of contrast issues (with selectors, actual vs required ratio)
-    and overflow issues where content extends beyond its container.
+    Returns a list of contrast issues (with selectors, actual vs required ratio),
+    overflow issues, and general accessibility violations.
 
     Args:
         url: URL to check
@@ -406,9 +406,17 @@ async def check_accessibility(url: str) -> str:
         for o in overflow
     ]
 
+    # Enhanced accessibility audit
+    a11y = await dom.check_accessibility(page)
+    a11y_issues = [
+        {"type": a.type, "selector": a.selector, "tag": a.element_tag,
+         "text": a.text[:80], "details": a.details, "severity": a.severity}
+        for a in a11y
+    ]
+
     await page.close()
 
-    total = len(contrast_issues) + len(overflow_issues)
+    total = len(contrast_issues) + len(overflow_issues) + len(a11y_issues)
     return json.dumps({
         "url": url,
         "total_issues": total,
@@ -416,8 +424,11 @@ async def check_accessibility(url: str) -> str:
         "contrast_count": len(contrast_issues),
         "overflow_issues": overflow_issues,
         "overflow_count": len(overflow_issues),
-        "summary": f"{len(contrast_issues)} problème(s) de contraste, "
-                   f"{len(overflow_issues)} overflow(s)" if total > 0
+        "accessibility_issues": a11y_issues,
+        "accessibility_count": len(a11y_issues),
+        "summary": f"{len(contrast_issues)} contraste, "
+                   f"{len(overflow_issues)} overflow, "
+                   f"{len(a11y_issues)} accessibilité" if total > 0
                    else "Aucun problème d'accessibilité détecté.",
     }, default=str)
 
@@ -507,6 +518,16 @@ async def full_page_analysis(
         for o in overflow[:10]
     ]
 
+    # Enhanced accessibility
+    a11y = await dom.check_accessibility(page)
+    result["accessibility_issues"] = [
+        {"type": a.type, "selector": a.selector, "details": a.details, "severity": a.severity}
+        for a in a11y[:15]
+    ]
+
+    # Framework detection
+    result["framework"] = await dom.detect_framework(page)
+
     # Console
     await asyncio.sleep(1)
     await console_cap.collect_rejections(page)
@@ -529,7 +550,8 @@ async def full_page_analysis(
     issues = (len(result.get("console_errors", [])) +
               len(result.get("network_errors", [])) +
               len(result.get("contrast_issues", [])) +
-              len(result.get("overflow_issues", [])))
+              len(result.get("overflow_issues", [])) +
+              len(result.get("accessibility_issues", [])))
     result["issues_total"] = issues
     result["summary"] = (
         f"Page '{result['title']}' — {len(result['interactive_elements'])} éléments interactifs, "
@@ -673,6 +695,337 @@ async def interact_with_page(
 
 
 # ═══════════════════════════════════════════════════════════════
+# TOOL: inspect_storage
+# ═══════════════════════════════════════════════════════════════
+
+@mcp.tool()
+async def inspect_storage(
+    url: str,
+    include_cookies: bool = True,
+) -> str:
+    """
+    Inspect browser storage: localStorage, sessionStorage, and cookies.
+
+    Use this to debug auth issues (expired tokens), check cached state,
+    find orphaned data, or verify cookie settings (secure, httpOnly).
+
+    Args:
+        url: URL to navigate to before inspecting storage
+        include_cookies: Include cookie data in results
+    """
+    browser = await _get_browser()
+    dom = await _get_dom()
+
+    page = await browser.navigate(url)
+    storage = await dom.inspect_storage(page)
+
+    result = {
+        "url": url,
+        "local_storage": storage.local_storage,
+        "local_storage_count": len(storage.local_storage),
+        "session_storage": storage.session_storage,
+        "session_storage_count": len(storage.session_storage),
+    }
+
+    if include_cookies:
+        result["cookies"] = storage.cookies
+        result["cookies_count"] = len(storage.cookies)
+
+    total = len(storage.local_storage) + len(storage.session_storage) + len(storage.cookies)
+    result["summary"] = (
+        f"{len(storage.local_storage)} localStorage, "
+        f"{len(storage.session_storage)} sessionStorage, "
+        f"{len(storage.cookies)} cookies"
+    )
+
+    await page.close()
+    return json.dumps(result, default=str)
+
+
+# ═══════════════════════════════════════════════════════════════
+# TOOL: capture_element_screenshot
+# ═══════════════════════════════════════════════════════════════
+
+@mcp.tool()
+async def capture_element_screenshot(
+    url: str,
+    selector: str,
+) -> str:
+    """
+    Capture a screenshot of a specific DOM element.
+
+    Use this to focus on a particular component, button, form, or section
+    without capturing the full page. Useful for visual inspection of
+    individual components.
+
+    Args:
+        url: URL of the page
+        selector: CSS selector of the element to screenshot (e.g., "#my-form", ".navbar")
+    """
+    browser = await _get_browser()
+    page = await browser.navigate(url)
+
+    try:
+        element = await page.query_selector(selector)
+        if not element:
+            await page.close()
+            return json.dumps({"error": f"Element '{selector}' not found", "url": url})
+
+        screenshot_bytes = await element.screenshot()
+        b64 = base64.b64encode(screenshot_bytes).decode("utf-8")
+
+        box = await element.bounding_box()
+        await page.close()
+
+        return json.dumps({
+            "status": "ok",
+            "url": url,
+            "selector": selector,
+            "bounding_box": box,
+            "image_base64": b64,
+            "size_bytes": len(screenshot_bytes),
+        })
+    except Exception as e:
+        await page.close()
+        return json.dumps({"error": str(e), "url": url, "selector": selector})
+
+
+# ═══════════════════════════════════════════════════════════════
+# TOOL: network_waterfall
+# ═══════════════════════════════════════════════════════════════
+
+@mcp.tool()
+async def network_waterfall(
+    url: str,
+    wait_ms: int = 3000,
+) -> str:
+    """
+    Capture a full network waterfall: all HTTP requests with timing,
+    status codes, sizes, and resource types.
+
+    Use this to diagnose slow APIs, identify large assets,
+    find CORS issues, detect unnecessary requests, or audit
+    third-party script loading.
+
+    Args:
+        url: URL to monitor
+        wait_ms: Time to wait for requests to complete (ms)
+    """
+    browser = await _get_browser()
+    page = await browser.navigate(url)
+
+    # Wait for additional async requests
+    await asyncio.sleep(wait_ms / 1000)
+
+    waterfall = browser.get_network_waterfall()
+    waterfall["url"] = url
+
+    browser.clear_captures()
+    await page.close()
+
+    return json.dumps(waterfall, default=str)
+
+
+# ═══════════════════════════════════════════════════════════════
+# TOOL: run_interaction_sequence
+# ═══════════════════════════════════════════════════════════════
+
+@mcp.tool()
+async def run_interaction_sequence(
+    url: str,
+    steps: str,
+    screenshot_each_step: bool = True,
+) -> str:
+    """
+    Execute a sequence of interactions on a page (click, type, select, wait)
+    and capture screenshots between each step.
+
+    Perfect for testing user flows: login → dashboard → action,
+    multi-step forms, navigation sequences.
+
+    Args:
+        url: Starting URL
+        steps: JSON array of steps, each with {action, selector?, value?, wait_ms?}.
+               Actions: "click", "type", "select", "wait", "navigate".
+               Example: [{"action":"type","selector":"#email","value":"test@test.com"},
+                         {"action":"click","selector":"#submit"}]
+        screenshot_each_step: Capture a screenshot after each step
+    """
+    from core.interaction_runner import InteractionRunner, NavigationStep
+
+    browser = await _get_browser()
+    page = await browser.navigate(url)
+    runner = InteractionRunner()
+
+    try:
+        step_list = json.loads(steps)
+    except json.JSONDecodeError as e:
+        await page.close()
+        return json.dumps({"error": f"Invalid JSON steps: {e}"})
+
+    nav_steps = [
+        NavigationStep(
+            action=s.get("action", "click"),
+            selector=s.get("selector", ""),
+            value=s.get("value", ""),
+            url=s.get("url", ""),
+            wait_ms=s.get("wait_ms", 0),
+            description=s.get("description", ""),
+        )
+        for s in step_list
+    ]
+
+    results = await runner.navigate_sequence(page, nav_steps)
+    output = {
+        "url": url,
+        "total_steps": len(nav_steps),
+        "completed_steps": sum(1 for r in results if r.success),
+        "steps": [],
+    }
+
+    for i, result in enumerate(results):
+        step_data = result.to_dict()
+        step_data["step_number"] = i + 1
+        if screenshot_each_step and result.success:
+            try:
+                ss = await browser.screenshot(page, full_page=True)
+                step_data["screenshot_base64"] = base64.b64encode(ss).decode("utf-8")
+            except Exception:
+                pass
+        output["steps"].append(step_data)
+
+    output["final_url"] = page.url
+    output["final_title"] = await page.title()
+
+    await page.close()
+    return json.dumps(output, default=str)
+
+
+# ═══════════════════════════════════════════════════════════════
+# TOOL: check_security_headers
+# ═══════════════════════════════════════════════════════════════
+
+@mcp.tool()
+async def check_security_headers(url: str) -> str:
+    """
+    Audit HTTP security headers of a page.
+
+    Checks: Content-Security-Policy, Strict-Transport-Security, X-Frame-Options,
+    X-Content-Type-Options, Referrer-Policy, Permissions-Policy,
+    X-XSS-Protection, Cross-Origin headers.
+
+    Args:
+        url: URL to audit
+    """
+    import httpx as _httpx
+    EXPECTED_HEADERS = {
+        "content-security-policy": {"label": "Content-Security-Policy", "severity": "high"},
+        "strict-transport-security": {"label": "Strict-Transport-Security (HSTS)", "severity": "high"},
+        "x-frame-options": {"label": "X-Frame-Options", "severity": "medium"},
+        "x-content-type-options": {"label": "X-Content-Type-Options", "severity": "medium"},
+        "referrer-policy": {"label": "Referrer-Policy", "severity": "medium"},
+        "permissions-policy": {"label": "Permissions-Policy", "severity": "low"},
+        "x-xss-protection": {"label": "X-XSS-Protection", "severity": "low"},
+        "cross-origin-opener-policy": {"label": "Cross-Origin-Opener-Policy", "severity": "low"},
+        "cross-origin-resource-policy": {"label": "Cross-Origin-Resource-Policy", "severity": "low"},
+    }
+
+    try:
+        async with _httpx.AsyncClient(follow_redirects=True, verify=False, timeout=15) as client:
+            resp = await client.get(url)
+    except Exception as e:
+        return json.dumps({"url": url, "error": str(e)})
+
+    headers_lower = {k.lower(): v for k, v in resp.headers.items()}
+    present = []
+    missing = []
+
+    for header_key, info in EXPECTED_HEADERS.items():
+        value = headers_lower.get(header_key)
+        if value:
+            present.append({"header": info["label"], "value": value[:200], "severity": info["severity"]})
+        else:
+            missing.append({"header": info["label"], "severity": info["severity"]})
+
+    grade = "A" if len(missing) == 0 else "B" if len(missing) <= 2 else "C" if len(missing) <= 4 else "D" if len(missing) <= 6 else "F"
+
+    return json.dumps({
+        "url": url,
+        "status_code": resp.status_code,
+        "grade": grade,
+        "present": present,
+        "present_count": len(present),
+        "missing": missing,
+        "missing_count": len(missing),
+        "all_headers": dict(resp.headers),
+        "summary": f"Grade {grade}: {len(present)}/{len(EXPECTED_HEADERS)} security headers présents, {len(missing)} manquant(s)",
+    }, default=str)
+
+
+# ═══════════════════════════════════════════════════════════════
+# TOOL: detect_framework
+# ═══════════════════════════════════════════════════════════════
+
+@mcp.tool()
+async def detect_framework(url: str) -> str:
+    """
+    Detect the frontend framework (React, Vue, Angular, Svelte, Next.js, Nuxt),
+    JavaScript libraries (jQuery, etc.), and analyze JS/CSS bundles.
+
+    Use this for framework-specific debugging advice and to understand
+    the tech stack of a page.
+
+    Args:
+        url: URL to analyze
+    """
+    browser = await _get_browser()
+    dom = await _get_dom()
+
+    page = await browser.navigate(url)
+    result = await dom.detect_framework(page)
+    result["url"] = url
+    await page.close()
+
+    return json.dumps(result, default=str)
+
+
+# ═══════════════════════════════════════════════════════════════
+# TOOL: search_page_content
+# ═══════════════════════════════════════════════════════════════
+
+@mcp.tool()
+async def search_page_content(
+    url: str,
+    query: str,
+) -> str:
+    """
+    Full-text search within a page's visible DOM content.
+
+    Finds all text nodes matching the query and returns their
+    location (selector, bounding box, visibility). Useful for
+    finding where specific content appears on a page.
+
+    Args:
+        url: URL to search
+        query: Text to search for (case-insensitive)
+    """
+    browser = await _get_browser()
+    dom = await _get_dom()
+
+    page = await browser.navigate(url)
+    results = await dom.search_text(page, query)
+    await page.close()
+
+    return json.dumps({
+        "url": url,
+        "query": query,
+        "matches": results,
+        "match_count": len(results),
+        "summary": f"{len(results)} résultat(s) trouvé(s) pour '{query}'",
+    }, default=str)
+
+
+# ═══════════════════════════════════════════════════════════════
 # RESOURCE: project info
 # ═══════════════════════════════════════════════════════════════
 
@@ -681,28 +1034,37 @@ def get_info() -> str:
     """Returns information about the Zephyr MCP server and available tools."""
     return json.dumps({
         "name": "Zephyr UI Intelligence",
-        "version": "0.1.0",
+        "version": "0.2.0",
         "description": (
             "Serveur MCP donnant à Copilot/Claude un accès visuel aux interfaces web. "
             "Capture de screenshots, extraction DOM, erreurs console, audit perf, "
-            "vérification accessibilité, et régression visuelle."
+            "vérification accessibilité, régression visuelle, et plus."
         ),
         "tools": [
             "capture_screenshot — Capture d'écran d'une page",
+            "capture_element_screenshot — Capture d'un élément spécifique (CSS selector)",
             "capture_multi_viewport — Screenshots multi-viewport (responsif)",
             "analyze_dom — Extraction structurée du DOM",
             "get_console_errors — Erreurs et warnings JavaScript",
+            "network_waterfall — Waterfall réseau complet (timing, tailles, types)",
             "audit_performance — Audit Lighthouse (Core Web Vitals)",
-            "check_accessibility — Contraste WCAG + overflow",
-            "full_page_analysis — Analyse complète (screenshot + DOM + erreurs + a11y)",
+            "check_accessibility — Contraste WCAG + overflow + audit a11y complet",
+            "check_security_headers — Audit headers de sécurité HTTP",
+            "detect_framework — Détection framework/librairies/bundles",
+            "inspect_storage — LocalStorage, SessionStorage, Cookies",
+            "search_page_content — Recherche full-text dans le DOM",
+            "full_page_analysis — Analyse complète (screenshot + DOM + erreurs + a11y + framework)",
             "compare_visual — Régression visuelle (baseline/diff)",
             "interact_with_page — Interaction (click, type, hover) + screenshot",
+            "run_interaction_sequence — Séquence d'interactions avec screenshots intermédiaires",
         ],
         "usage_tips": [
             "Utilise full_page_analysis en premier pour avoir une vue complète",
             "Pour du debug spécifique, combine capture_screenshot + get_console_errors",
             "Pour le responsive, utilise capture_multi_viewport",
-            "Pour tester un flux, enchaîne interact_with_page avec screenshot_after=True",
+            "Pour tester un flux, utilise run_interaction_sequence",
+            "Pour les problèmes d'auth, utilise inspect_storage pour vérifier les tokens",
+            "Pour le déploiement, utilise check_security_headers",
         ],
     }, indent=2, ensure_ascii=False)
 

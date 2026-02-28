@@ -25,6 +25,8 @@ class ContextBuilder:
         self.screenshot_mgr = ScreenshotManager()
         self.perf_analyzer = PerfAnalyzer()
         self.interaction_runner = InteractionRunner()
+        # Smart context cache: invalidated by URL change not just time
+        self._context_cache: dict[str, dict] = {}  # cache_key -> {url, data, timestamp}
 
     async def build_dev_context(
         self,
@@ -35,6 +37,14 @@ class ContextBuilder:
         include_perf: bool = False,
     ) -> dict:
         """Build context for the Dev Agent: errors, DOM, perf, UI issues."""
+        import time
+
+        # Smart cache: return cached data if same URL and < 2 min old
+        cache_key = f"dev:{session_id}:{viewport or 'desktop'}"
+        cached = self._context_cache.get(cache_key)
+        if cached and cached["url"] == url and (time.time() - cached["timestamp"]) < 120:
+            return cached["data"]
+
         context = {"url": url}
         own_page = page is None
 
@@ -102,6 +112,23 @@ class ContextBuilder:
             )
             context["screenshot_path"] = screenshot_path
 
+            # Enhanced accessibility audit
+            try:
+                a11y = await self.dom_extractor.check_accessibility(page)
+                context["accessibility_issues"] = [
+                    {"type": a.type, "selector": a.selector, "tag": a.element_tag,
+                     "text": a.text, "details": a.details, "severity": a.severity}
+                    for a in a11y
+                ]
+            except Exception:
+                pass
+
+            # Framework detection
+            try:
+                context["framework"] = await self.dom_extractor.detect_framework(page)
+            except Exception:
+                pass
+
             # Performance (optional — expensive)
             if include_perf:
                 try:
@@ -123,7 +150,20 @@ class ContextBuilder:
                 self.console_capture.clear()
                 self.browser.clear_captures()
 
+        # Cache result
+        import time
+        self._context_cache[cache_key] = {"url": url, "data": context, "timestamp": time.time()}
+
         return context
+
+    def invalidate_cache(self, session_id: str = None) -> None:
+        """Invalidate context cache for a session or all."""
+        if session_id:
+            keys_to_remove = [k for k in self._context_cache if session_id in k]
+            for k in keys_to_remove:
+                del self._context_cache[k]
+        else:
+            self._context_cache.clear()
 
     async def build_user_context(
         self,

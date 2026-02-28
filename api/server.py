@@ -5,8 +5,9 @@ FastAPI application with REST endpoints and WebSocket support.
 
 from contextlib import asynccontextmanager
 from pathlib import Path
+import time
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -17,6 +18,7 @@ from api.routes.debug import router as debug_router
 from api.routes.guide import router as guide_router
 from api.routes.reports import router as reports_router
 from api.routes.widget import router as widget_router
+from api.routes.ci import router as ci_router
 from api.websocket.chat_ws import router as ws_router
 
 from orchestrator.context_builder import ContextBuilder
@@ -70,7 +72,44 @@ app.include_router(debug_router, prefix="/api", tags=["Debug"])
 app.include_router(guide_router, prefix="/api", tags=["Guide"])
 app.include_router(reports_router, prefix="/api", tags=["Reports"])
 app.include_router(widget_router, prefix="/api", tags=["Widget SDK"])
+app.include_router(ci_router, prefix="/api", tags=["CI"])
 app.include_router(ws_router, tags=["WebSocket"])
+
+
+# --- Rate Limiting Middleware ---
+_rate_limit_store: dict[str, list[float]] = {}
+
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    """Simple in-memory rate limiter."""
+    server_config = get_server_config()
+    max_rpm = server_config.rate_limit.get("max_requests_per_minute", 30)
+
+    # Skip rate limiting for health/status/static
+    path = request.url.path
+    if path.startswith("/api/health") or path.startswith("/api/status") or not path.startswith("/api/"):
+        return await call_next(request)
+
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.time()
+
+    # Clean old entries
+    if client_ip in _rate_limit_store:
+        _rate_limit_store[client_ip] = [t for t in _rate_limit_store[client_ip] if now - t < 60]
+    else:
+        _rate_limit_store[client_ip] = []
+
+    if len(_rate_limit_store[client_ip]) >= max_rpm:
+        return Response(
+            content='{"error": "Rate limit exceeded", "retry_after": 60}',
+            status_code=429,
+            media_type="application/json",
+            headers={"Retry-After": "60"},
+        )
+
+    _rate_limit_store[client_ip].append(now)
+    return await call_next(request)
 
 # --- Static files (Zephyr UI) ---
 ui_dist = Path(__file__).parent.parent / "zephyr_ui" / "dist"

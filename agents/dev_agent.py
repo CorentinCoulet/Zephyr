@@ -84,15 +84,30 @@ class DevAgent(BaseAgent):
 
         if "dom_snapshot" in context:
             dom = context["dom_snapshot"]
-            context_parts.append(
-                f"## DOM Snapshot (simplifié)\n```json\n{json.dumps(dom, indent=2, default=str)[:3000]}\n```"
-            )
+            # Smart DOM summary instead of truncated JSON
+            summary = self._summarize_dom(dom)
+            context_parts.append(f"## DOM Summary\n{summary}")
 
         if "performance" in context:
             perf = context["performance"]
-            context_parts.append(
-                f"## Rapport Performance\n```json\n{json.dumps(perf, indent=2, default=str)[:2000]}\n```"
-            )
+            # Extract key metrics instead of raw JSON
+            if isinstance(perf, dict):
+                scores_str = ""
+                if "scores" in perf:
+                    s = perf["scores"]
+                    scores_str = f"Perf={s.get('performance', '?')} A11y={s.get('accessibility', '?')} BP={s.get('best_practices', '?')} SEO={s.get('seo', '?')}"
+                metrics_str = ""
+                if "metrics" in perf:
+                    m = perf["metrics"]
+                    metrics_str = ", ".join(f"{k}: {v.get('display', v.get('value', '?'))}" for k, v in m.items())
+                opps = perf.get("opportunities", [])
+                opps_str = ""
+                if opps:
+                    opps_str = "\n".join(f"- {o.get('title', '?')} (save {o.get('savings_ms', 0)}ms)" for o in opps[:5])
+                context_parts.append(
+                    f"## Rapport Performance\n{scores_str}\n{metrics_str}"
+                    + (f"\n### Optimisations\n{opps_str}" if opps_str else "")
+                )
 
         if "contrast_issues" in context:
             issues = context["contrast_issues"]
@@ -133,6 +148,40 @@ class DevAgent(BaseAgent):
             context_parts.append(
                 f"## Éléments interactifs ({len(elements)} trouvés)"
             )
+
+        if "accessibility_issues" in context:
+            a11y = context["accessibility_issues"]
+            if a11y:
+                context_parts.append(
+                    f"## Problèmes d'Accessibilité ({len(a11y)})\n"
+                    + "\n".join(
+                        f"- [{i.get('severity', 'warning')}] {i.get('type', '?')}: {i.get('details', '')} ({i.get('selector', '?')})"
+                        for i in a11y[:15]
+                    )
+                )
+
+        if "framework" in context:
+            fw = context["framework"]
+            if fw:
+                frameworks = fw.get("frameworks", [])
+                if frameworks:
+                    context_parts.append(
+                        f"## Framework détecté\n"
+                        + ", ".join(f"{f.get('name')} {f.get('version', '')}".strip() for f in frameworks)
+                    )
+
+        if "storage" in context:
+            storage = context["storage"]
+            if storage:
+                parts = []
+                ls = storage.get("local_storage", {})
+                ss = storage.get("session_storage", {})
+                cookies = storage.get("cookies", [])
+                if ls: parts.append(f"localStorage: {len(ls)} clés")
+                if ss: parts.append(f"sessionStorage: {len(ss)} clés")
+                if cookies: parts.append(f"cookies: {len(cookies)}")
+                if parts:
+                    context_parts.append(f"## Storage\n" + ", ".join(parts))
 
         if "visual_diff" in context:
             diff = context["visual_diff"]
@@ -242,6 +291,7 @@ Analyse ces informations et fournis un diagnostic complet."""
         count += len(context.get("network_errors", []))
         count += len(context.get("contrast_issues", []))
         count += len(context.get("overflow_issues", []))
+        count += len(context.get("accessibility_issues", []))
         return count
 
     def _generate_suggestions(self, context: dict) -> list[str]:
@@ -252,13 +302,63 @@ Analyse ces informations et fournis un diagnostic complet."""
             suggestions.append("/debug — Analyser les erreurs en détail")
         if context.get("performance"):
             suggestions.append("/perf — Voir les recommandations performance")
-        if context.get("contrast_issues") or context.get("overflow_issues"):
-            suggestions.append("/audit — Audit UI complet")
+        if context.get("contrast_issues") or context.get("overflow_issues") or context.get("accessibility_issues"):
+            suggestions.append("/audit — Audit UI & accessibilité complet")
+        if context.get("network_errors"):
+            suggestions.append("/network — Analyser le waterfall réseau")
         if not suggestions:
             suggestions = [
                 "/debug — Lancer un diagnostic",
                 "/perf — Auditer la performance",
                 "/screenshot — Capturer multi-viewport",
+                "/storage — Inspecter le storage",
             ]
 
         return suggestions[:4]
+
+    @staticmethod
+    def _summarize_dom(dom: dict, depth: int = 0) -> str:
+        """Generate an intelligent DOM summary instead of raw JSON."""
+        if not dom or not isinstance(dom, dict):
+            return "(DOM vide)"
+
+        tag_counts: dict[str, int] = {}
+        max_depth = 0
+        total_nodes = 0
+        text_nodes = 0
+        interactive_tags = {"a", "button", "input", "select", "textarea", "form"}
+        interactive_count = 0
+        semantic_tags = {"header", "footer", "nav", "main", "section", "article", "aside"}
+        semantic_used = set()
+
+        def walk(node, d=0):
+            nonlocal max_depth, total_nodes, text_nodes, interactive_count
+            if not isinstance(node, dict):
+                return
+            total_nodes += 1
+            tag = node.get("tag", "")
+            if tag:
+                tag_counts[tag] = tag_counts.get(tag, 0) + 1
+                if tag in interactive_tags:
+                    interactive_count += 1
+                if tag in semantic_tags:
+                    semantic_used.add(tag)
+            if node.get("text"):
+                text_nodes += 1
+            max_depth = max(max_depth, d)
+            for child in node.get("children", []):
+                walk(child, d + 1)
+
+        walk(dom)
+
+        top_tags = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)[:8]
+        lines = [
+            f"Nœuds: {total_nodes} | Profondeur max: {max_depth} | Interactifs: {interactive_count} | Texte: {text_nodes}",
+            f"Tags fréquents: {', '.join(f'{t}({c})' for t, c in top_tags)}",
+        ]
+        if semantic_used:
+            lines.append(f"Tags sémantiques: {', '.join(sorted(semantic_used))}")
+        missing_semantic = semantic_tags - semantic_used
+        if missing_semantic:
+            lines.append(f"Sémantique manquante: {', '.join(sorted(missing_semantic))}")
+        return "\n".join(lines)

@@ -61,6 +61,30 @@ class TestSessionManager:
         mgr.destroy_session("to-delete")
         assert mgr.get_session("to-delete") is None
 
+    def test_session_user_preferences(self):
+        from orchestrator.session_manager import SessionManager
+        mgr = SessionManager()
+        session = mgr.get_or_create("prefs-1")
+        session.user_preferences["language"] = "en"
+        session.user_preferences["verbosity"] = "detailed"
+        assert session.user_preferences["language"] == "en"
+        assert session.user_preferences["verbosity"] == "detailed"
+
+
+class TestContextBuilder:
+    def test_context_builder_has_cache(self):
+        from orchestrator.context_builder import ContextBuilder
+        # invalidate_cache is an instance method
+        assert hasattr(ContextBuilder, "invalidate_cache")
+
+    def test_invalidate_cache(self):
+        from orchestrator.context_builder import ContextBuilder
+        from unittest.mock import MagicMock
+        builder = ContextBuilder.__new__(ContextBuilder)
+        builder._context_cache = {"session1_url": {"url": "http://test", "data": {}, "timestamp": 0}}
+        builder.invalidate_cache("session1")
+        assert len(builder._context_cache) == 0
+
 
 class TestPromptEngine:
     def test_prompt_engine_instantiates(self):

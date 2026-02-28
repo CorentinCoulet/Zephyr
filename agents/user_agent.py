@@ -23,7 +23,12 @@ SYSTEM_PROMPT = """Tu es Zephyr 🦊 en mode Guide Utilisateur — un assistant 
 - Tu utilises un langage simple, sans jargon technique
 - Tu structures tes guides en étapes numérotées claires
 - Tu utilises des émojis pour rendre le guide agréable (📍 étape, ✅ fait, 👆 action, 💡 astuce)
-- Tu réponds en français sauf si le contexte est explicitement en anglais
+- Tu adaptes ton niveau de détail au profil de l'utilisateur
+
+## Niveau de verbosité
+- minimal : réponses courtes, étapes essentielles uniquement
+- normal : explication claire avec contexte
+- detailed : très détaillé, chaque étape expliquée en profondeur
 
 ## Format de guide pas-à-pas
 📍 **Étape X/N** : Description de l'action
@@ -38,7 +43,11 @@ SYSTEM_PROMPT = """Tu es Zephyr 🦊 en mode Guide Utilisateur — un assistant 
 
 ## Contexte
 Tu reçois en contexte : la structure de navigation du site, les éléments interactifs de la page, les formulaires, et la position actuelle de l'utilisateur.
+Si des préférences utilisateur sont fournies, adapte ton style en conséquence.
 """
+
+# Onboarding step tracking per session
+_onboarding_progress: dict[str, dict] = {}  # session_id -> {"completed_steps": set, "total_steps": int}
 
 
 class UserAgent(BaseAgent):
@@ -47,16 +56,42 @@ class UserAgent(BaseAgent):
     agent_name = "user_agent"
     agent_mode = "user"
 
-    def get_system_prompt(self) -> str:
-        return SYSTEM_PROMPT
+    def get_system_prompt(self, preferences: Optional[dict] = None) -> str:
+        prompt = SYSTEM_PROMPT
+        if preferences:
+            lang = preferences.get("language", "fr")
+            verbosity = preferences.get("verbosity", "normal")
+            expertise = preferences.get("expertise_level", "beginner")
+            a11y_mode = preferences.get("accessibility_mode", False)
+            prompt += f"\n## Préférences utilisateur\n"
+            prompt += f"- Langue: {lang}\n"
+            prompt += f"- Verbosité: {verbosity}\n"
+            prompt += f"- Niveau: {expertise}\n"
+            if lang == "en":
+                prompt += "- Réponds en anglais\n"
+            if a11y_mode:
+                prompt += "- Mode accessibilité: descriptions compatibles lecteur d'écran\n"
+        return prompt
 
     async def process(
         self, query: str, context: dict, session_id: str
     ) -> AgentResponse:
         """Process a user navigation/help query."""
 
+        # Apply user preferences if available
+        preferences = context.get("user_preferences", {})
+
         # Build contextual information for the LLM
         context_parts = []
+
+        # Add friction alerts if detected
+        if "friction_alerts" in context:
+            alerts = context["friction_alerts"]
+            if alerts:
+                context_parts.append(
+                    f"## ⚠️ Signaux de friction détectés ({len(alerts)})\n"
+                    + "\n".join(f"- {a.get('type', '?')}: {a.get('suggestion', '')}" for a in alerts)
+                )
 
         if "navigation" in context:
             nav_items = context["navigation"]
@@ -138,9 +173,16 @@ class UserAgent(BaseAgent):
 
 Aide l'utilisateur de manière simple et guidée."""
 
-        # Build messages
+        # Build messages — use preferences-aware system prompt
         conversation = self.get_conversation(session_id)
-        messages = [msg.to_dict() for msg in conversation[:-1]]
+        messages = []
+        for msg in conversation[:-1]:
+            d = msg.to_dict()
+            if d["role"] == "system":
+                d["content"] = self.get_system_prompt(preferences)
+            messages.append(d)
+        if not any(m["role"] == "system" for m in messages):
+            messages.insert(0, {"role": "system", "content": self.get_system_prompt(preferences)})
         messages.append({"role": "user", "content": user_message})
 
         try:
@@ -166,13 +208,53 @@ Aide l'utilisateur de manière simple et guidée."""
                 expression="surprised",
             )
 
-    async def generate_onboarding(self, context: dict) -> AgentResponse:
-        """Generate an onboarding tour for a new user."""
-        return await self.chat(
-            "Génère un tour guidé de bienvenue pour un nouvel utilisateur. "
-            "Présente les sections principales de l'application et ce qu'on peut y faire.",
-            context,
-        )
+    async def generate_onboarding(self, context: dict, session_id: str = "default") -> AgentResponse:
+        """Generate an onboarding tour for a new user. Tracks progress."""
+        # Check if already started
+        progress = _onboarding_progress.get(session_id)
+        if progress and progress.get("completed_steps"):
+            completed = progress["completed_steps"]
+            total = progress["total_steps"]
+            query = (
+                f"Continue le tour guidé. L'utilisateur a déjà vu les étapes {sorted(completed)} sur {total}. "
+                f"Reprends à partir de l'étape suivante."
+            )
+        else:
+            query = (
+                "Génère un tour guidé de bienvenue pour un nouvel utilisateur. "
+                "Présente les sections principales de l'application et ce qu'on peut y faire. "
+                "Numérote chaque étape clairement."
+            )
+        response = await self.chat(query, context, session_id)
+        # Track total steps
+        steps = self._extract_steps(response.message)
+        if session_id not in _onboarding_progress:
+            _onboarding_progress[session_id] = {"completed_steps": set(), "total_steps": len(steps)}
+        return response
+
+    def mark_onboarding_step(self, session_id: str, step: int) -> dict:
+        """Mark an onboarding step as completed."""
+        if session_id not in _onboarding_progress:
+            _onboarding_progress[session_id] = {"completed_steps": set(), "total_steps": 0}
+        _onboarding_progress[session_id]["completed_steps"].add(step)
+        return {
+            "completed": sorted(_onboarding_progress[session_id]["completed_steps"]),
+            "total": _onboarding_progress[session_id]["total_steps"],
+            "done": len(_onboarding_progress[session_id]["completed_steps"]) >= _onboarding_progress[session_id]["total_steps"] > 0,
+        }
+
+    def get_onboarding_progress(self, session_id: str) -> dict:
+        """Get current onboarding progress."""
+        progress = _onboarding_progress.get(session_id, {"completed_steps": set(), "total_steps": 0})
+        return {
+            "completed": sorted(progress["completed_steps"]),
+            "total": progress["total_steps"],
+            "done": len(progress["completed_steps"]) >= progress["total_steps"] > 0,
+        }
+
+    def reset_onboarding(self, session_id: str) -> None:
+        """Reset onboarding progress for a session."""
+        _onboarding_progress.pop(session_id, None)
 
     async def explain_element(
         self, selector: str, element_info: dict, context: dict
@@ -195,6 +277,43 @@ Aide l'utilisateur de manière simple et guidée."""
         """Generate step-by-step instructions to achieve a goal."""
         return await self.chat(
             f"Guide-moi étape par étape pour : {goal}",
+            context,
+        )
+
+    async def generate_page_tooltips(self, context: dict) -> AgentResponse:
+        """Generate tooltips/descriptions for all visible interactive elements."""
+        elements = context.get("interactive_elements", [])
+        visible = [e for e in elements if e.get("is_visible", True)]
+        if not visible:
+            return AgentResponse(
+                success=True,
+                message="Aucun élément interactif visible sur cette page.",
+                expression="neutral",
+            )
+        elements_desc = "\n".join(
+            f"- [{e.get('tag')}] \"{e.get('text', '?')}\" selector={e.get('selector', '?')}"
+            for e in visible[:40]
+        )
+        return await self.chat(
+            f"Génère une courte description/tooltip (1 phrase max) pour chacun de ces éléments interactifs. "
+            f"Retourne le résultat sous forme de liste avec le selector et la description.\n\n{elements_desc}",
+            context,
+        )
+
+    async def analyze_friction(self, session_events: list[dict], context: dict) -> AgentResponse:
+        """Analyze friction points and generate proactive help."""
+        friction_points = self.detect_friction(session_events)
+        if not friction_points:
+            return AgentResponse(
+                success=True,
+                message="Aucun signe de difficulté détecté. L'utilisateur semble à l'aise.",
+                expression="happy",
+            )
+        context["friction_alerts"] = friction_points
+        friction_desc = "\n".join(f"- {f['type']}: {f.get('suggestion', '')}" for f in friction_points)
+        return await self.chat(
+            f"Des signaux de difficulté ont été détectés chez l'utilisateur :\n{friction_desc}\n\n"
+            f"Propose une aide proactive et bienveillante, sans être intrusif.",
             context,
         )
 

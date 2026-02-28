@@ -32,7 +32,7 @@ class Settings(BaseSettings):
 
     # --- App ---
     app_name: str = "Zephyr Intelligence Platform"
-    app_version: str = "0.1.0"
+    app_version: str = "0.2.0"
     debug: bool = False
     host: str = "0.0.0.0"
     port: int = 8000
