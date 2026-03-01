@@ -2,6 +2,31 @@
  * @zephyr/widget — TypeScript type definitions
  */
 
+/** Application context provided by the integrator to enrich chatbot responses. */
+export interface AppContext {
+  /** Application name */
+  name?: string;
+  /** Short description of what the application does */
+  description?: string;
+  /** Key features / pages of the application */
+  features?: Array<{
+    name: string;
+    path?: string;
+    description?: string;
+  }>;
+  /** Frequently asked questions with pre-written answers */
+  faq?: Array<{
+    question: string;
+    answer: string;
+  }>;
+  /** Domain-specific terminology definitions */
+  terminology?: Record<string, string>;
+  /** Typical user workflows described as steps */
+  workflows?: string[];
+  /** Any extra free-form context the integrator wants the chatbot to know */
+  custom?: string;
+}
+
 export interface ZephyrWidgetOptions {
   /** URL of the Zephyr backend server */
   server: string;
@@ -35,6 +60,11 @@ export interface ZephyrWidgetOptions {
   badgeCount?: number;
   /** Enabled features */
   features?: Array<"chat" | "guide" | "search">;
+  /**
+   * Application context — describe your app so the chatbot can answer
+   * user questions faster without needing to analyse the DOM every time.
+   */
+  appContext?: AppContext;
   /** Mount inside a specific selector (inline mode — no floating trigger) */
   containerSelector?: string | null;
   /** Additional CSS to inject */
@@ -57,6 +87,8 @@ export interface ZephyrWidgetInstance {
   setTheme(theme: "dark" | "light" | "auto"): void;
   setPersona(persona: string): void;
   setAccentColor(color: string): void;
+  /** Update the application context at runtime (useful for SPAs). */
+  setAppContext(ctx: AppContext): void;
   on(event: "ready" | "message" | "error" | "toggle", handler: Function): void;
   readonly messages: Array<{ role: string; text: string; expression: string }>;
   readonly isOpen: boolean;

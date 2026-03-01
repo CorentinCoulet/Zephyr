@@ -102,6 +102,20 @@ export default defineZephyrConfig({
   greeting: 'Bonjour ! Comment puis-je vous aider ? 🦊',
   placeholder: 'Posez une question...',
   features: ['chat', 'guide', 'search'],
+
+  // Application Context — describe your app for instant chatbot answers
+  appContext: {
+    name: 'MonApp',
+    description: 'Plateforme de gestion de projets',
+    features: [
+      { name: 'Dashboard', path: '/dashboard', description: 'Vue d\'ensemble des projets' },
+    ],
+    faq: [
+      { question: 'Comment créer un projet ?', answer: 'Menu + > Nouveau projet' },
+    ],
+    terminology: { sprint: 'période de 2 semaines' },
+    workflows: ['Créer projet → Ajouter membres → Créer tâches → Suivre'],
+  },
 });
 ```
 

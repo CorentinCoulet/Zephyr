@@ -45,6 +45,7 @@
     showBadge: true,
     badgeCount: 0,
     features: ["chat", "guide", "search"], // Enabled features
+    appContext: null, // App context object: { name, description, features, faq, terminology, workflows, custom }
     onReady: null,
     onMessage: null,
     onError: null,
@@ -409,7 +410,24 @@
     send(text) {
       if (!text.trim()) return;
       this._addMessage("user", text);
-      this._wsSend({ message: text, url: window.location.href });
+      const payload = { message: text, url: window.location.href };
+      // Include app context in first message as fallback if WS reconnected
+      if (this.config.appContext && this.messages.filter(m => m.role === "user").length <= 1) {
+        payload.app_context = this.config.appContext;
+      }
+      this._wsSend(payload);
+    }
+
+    /**
+     * Update the application context at runtime.
+     * Useful for SPAs that want to change context based on the current route.
+     */
+    setAppContext(ctx) {
+      this.config.appContext = ctx;
+      // Notify server of updated context
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: "app_context", app_context: ctx }));
+      }
     }
 
     setTheme(theme) {
@@ -605,7 +623,15 @@
 
       this.ws = new WebSocket(url);
 
-      this.ws.onopen = () => {};
+      this.ws.onopen = () => {
+        // Send app context on connect so the server can cache it for the session
+        if (this.config.appContext) {
+          this.ws.send(JSON.stringify({
+            type: "app_context",
+            app_context: this.config.appContext,
+          }));
+        }
+      };
 
       this.ws.onmessage = (event) => {
         let data;

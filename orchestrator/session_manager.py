@@ -22,6 +22,7 @@ class SessionState:
     conversation_history: list[dict] = field(default_factory=list)
     analysis_cache: dict[str, Any] = field(default_factory=dict)
     user_preferences: dict[str, Any] = field(default_factory=dict)
+    app_context: dict[str, Any] = field(default_factory=dict)
 
     @property
     def is_expired(self) -> bool:
@@ -72,6 +73,7 @@ class SessionState:
             "created_at": self.created_at,
             "last_activity": self.last_activity,
             "is_expired": self.is_expired,
+            "has_app_context": bool(self.app_context),
         }
 
 

@@ -44,6 +44,13 @@ SYSTEM_PROMPT = """Tu es Zephyr 🦊 en mode Guide Utilisateur — un assistant 
 ## Contexte
 Tu reçois en contexte : la structure de navigation du site, les éléments interactifs de la page, les formulaires, et la position actuelle de l'utilisateur.
 Si des préférences utilisateur sont fournies, adapte ton style en conséquence.
+
+## Contexte applicatif (fourni par le développeur)
+Si un contexte applicatif est fourni, utilise-le EN PRIORITÉ pour répondre aux questions.
+Ce contexte décrit l'application, ses fonctionnalités, son vocabulaire métier et ses workflows.
+Il est plus fiable que l'analyse du DOM pour les questions métier.
+Si la réponse est dans le contexte applicatif, réponds directement sans hésiter.
+Si la FAQ contient une réponse exacte, utilise-la telle quelle.
 """
 
 # Onboarding step tracking per session
@@ -83,6 +90,40 @@ class UserAgent(BaseAgent):
 
         # Build contextual information for the LLM
         context_parts = []
+
+        # ── App context (highest priority — pre-provided by developer) ──
+        if "app_context" in context:
+            app_ctx = context["app_context"]
+            app_parts = []
+            if app_ctx.get("name") or app_ctx.get("description"):
+                app_parts.append(
+                    f"**{app_ctx.get('name', 'Application')}** — {app_ctx.get('description', '')}"
+                )
+            if app_ctx.get("features"):
+                features_desc = "\n".join(
+                    f"- **{f.get('name', '?')}** ({f.get('path', '')}) : {f.get('description', '')}"
+                    for f in app_ctx["features"]
+                )
+                app_parts.append(f"### Fonctionnalités\n{features_desc}")
+            if app_ctx.get("faq"):
+                faq_desc = "\n".join(
+                    f"- **Q:** {f.get('question', f.get('q', '?'))}\n  **R:** {f.get('answer', f.get('a', '?'))}"
+                    for f in app_ctx["faq"]
+                )
+                app_parts.append(f"### FAQ\n{faq_desc}")
+            if app_ctx.get("terminology"):
+                terms = "\n".join(
+                    f"- **{term}** : {definition}"
+                    for term, definition in app_ctx["terminology"].items()
+                )
+                app_parts.append(f"### Vocabulaire métier\n{terms}")
+            if app_ctx.get("workflows"):
+                wf = "\n".join(f"- {w}" for w in app_ctx["workflows"])
+                app_parts.append(f"### Parcours types\n{wf}")
+            if app_ctx.get("custom"):
+                app_parts.append(f"### Informations complémentaires\n{app_ctx['custom']}")
+            if app_parts:
+                context_parts.append("## 📋 Contexte applicatif (fourni par le développeur)\n" + "\n\n".join(app_parts))
 
         # Add friction alerts if detected
         if "friction_alerts" in context:

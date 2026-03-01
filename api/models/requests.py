@@ -28,6 +28,7 @@ class GuideRequest(BaseModel):
     url: str = Field(..., description="Current page URL")
     query: str = Field(..., description="User's question or goal")
     session_id: Optional[str] = None
+    app_context: Optional[dict] = Field(None, description="Application context provided by integrator")
 
 
 class ChatRequest(BaseModel):
@@ -36,6 +37,7 @@ class ChatRequest(BaseModel):
     url: Optional[str] = Field(None, description="Current page URL")
     mode: Optional[str] = Field(None, description="Force mode: dev or user")
     session_id: Optional[str] = None
+    app_context: Optional[dict] = Field(None, description="Application context provided by integrator")
 
 
 class ScreenshotRequest(BaseModel):

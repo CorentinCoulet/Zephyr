@@ -1,6 +1,6 @@
 {
   "name": "@zantopia/zephyr-ui",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Zephyr — Embeddable AI assistant widget. Import <Zephyr /> into any React/Vue/JS project.",
   "type": "module",
   "main": "dist/index.js",

@@ -74,6 +74,21 @@ async def websocket_chat(websocket: WebSocket):
             message = data.get("message", "")
             url = data.get("url", session.target_url)
             forced_mode = data.get("mode")
+            incoming_app_context = data.get("app_context")
+
+            # Handle app_context messages (sent on connect or via setAppContext)
+            if data.get("type") == "app_context" and incoming_app_context:
+                session.app_context = incoming_app_context
+                await manager.send_json(session_id, {
+                    "type": "status",
+                    "message": "Contexte applicatif reçu.",
+                    "expression": "happy",
+                })
+                continue
+
+            # Store app_context from regular messages (fallback)
+            if incoming_app_context and not session.app_context:
+                session.app_context = incoming_app_context
 
             if not message:
                 continue
@@ -112,6 +127,12 @@ async def websocket_chat(websocket: WebSocket):
                         pages_visited=session.pages_visited,
                     )
                     agent = user_agent
+
+                # Inject app context and user preferences into context
+                if session.app_context:
+                    context["app_context"] = session.app_context
+                if session.user_preferences:
+                    context["user_preferences"] = session.user_preferences
 
                 # Get agent response
                 response = await agent.chat(message, context, session_id)

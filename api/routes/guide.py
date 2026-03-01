@@ -32,6 +32,12 @@ async def guide_user(req: GuideRequest, request: Request):
     if session.user_preferences:
         context["user_preferences"] = session.user_preferences
 
+    # Inject app context (from request or session)
+    app_ctx = req.app_context or session.app_context
+    if app_ctx:
+        session.app_context = app_ctx
+        context["app_context"] = app_ctx
+
     response = await user_agent.chat(req.query, context, session.session_id)
 
     session.add_message("user", req.query)
@@ -62,6 +68,12 @@ async def onboarding(req: GuideRequest, request: Request):
     )
     if session.user_preferences:
         context["user_preferences"] = session.user_preferences
+
+    # Inject app context for richer onboarding
+    app_ctx = req.app_context or session.app_context
+    if app_ctx:
+        session.app_context = app_ctx
+        context["app_context"] = app_ctx
 
     # Try building a sitemap
     try:
@@ -124,6 +136,12 @@ async def chat_user(req: ChatRequest, request: Request):
             session_id=session.session_id,
             pages_visited=session.pages_visited,
         )
+
+    # Inject app context (from request or session)
+    app_ctx = getattr(req, 'app_context', None) or session.app_context
+    if app_ctx:
+        session.app_context = app_ctx
+        context["app_context"] = app_ctx
 
     response = await user_agent.chat(req.message, context, session.session_id)
 
@@ -270,4 +288,51 @@ async def update_user_preferences(request: Request):
         "success": True,
         "session_id": session_id,
         "preferences": session.user_preferences,
+    }
+
+
+@router.put("/guide/app-context")
+async def set_app_context(request: Request):
+    """Set or update the application context for a session.
+
+    The application context is provided by the developer who integrates Zephyr.
+    It gives the chatbot pre-built knowledge about the app (features, FAQ,
+    terminology, workflows) so it can answer user questions faster.
+    """
+    body = await request.json()
+    session_id = body.get("session_id")
+    app_context = body.get("app_context", {})
+
+    if not session_id:
+        return {"success": False, "error": "session_id required"}
+    if not app_context:
+        return {"success": False, "error": "app_context required"}
+
+    session_mgr = request.app.state.session_manager
+    session = session_mgr.get_session(session_id)
+    if not session:
+        return {"success": False, "error": "Session not found"}
+
+    session.app_context = app_context
+
+    return {
+        "success": True,
+        "session_id": session_id,
+        "message": "App context updated",
+        "context_keys": list(app_context.keys()),
+    }
+
+
+@router.get("/guide/app-context/{session_id}")
+async def get_app_context(session_id: str, request: Request):
+    """Get the current application context for a session."""
+    session_mgr = request.app.state.session_manager
+    session = session_mgr.get_session(session_id)
+    if not session:
+        return {"success": False, "error": "Session not found"}
+
+    return {
+        "success": True,
+        "session_id": session_id,
+        "app_context": session.app_context,
     }

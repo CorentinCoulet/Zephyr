@@ -120,6 +120,7 @@ uvicorn api.server:app --reload --port 8000
 - 4 personas : Mascot, Spirit, Minimal, Futuristic (+ URL custom)
 - Thème dark/light/auto, couleur d'accent configurable
 - Position configurable (4 coins), taille (sm/md/lg)
+- **Application Context** — le développeur fournit un contexte métier (features, FAQ, terminologie, workflows) pour des réponses instantanées
 - Onboarding interactif guidé par IA
 - Recherche de fonctionnalités en langage naturel
 - Guide étape par étape
@@ -197,6 +198,8 @@ docker-compose up --build
 | POST    | `/api/guide`          | Guidance utilisateur                 |
 | POST    | `/api/guide/onboarding` | Génération tour d'onboarding       |
 | POST    | `/api/guide/find`     | Trouver une fonctionnalité           |
+| PUT     | `/api/guide/app-context` | Définir/mettre à jour le contexte applicatif |
+| GET     | `/api/guide/app-context/:id` | Récupérer le contexte applicatif d'une session |
 | POST    | `/api/chat/dev`       | Chat Dev Agent                       |
 | POST    | `/api/chat/user`      | Chat User Agent                      |
 | POST    | `/api/screenshot`     | Captures multi-viewport              |
@@ -287,6 +290,20 @@ Widget AI insérable en une ligne dans n'importe quel projet web.
     theme: 'auto',
     position: 'bottom-right',
     accentColor: '#ff6b35',
+    // Contexte applicatif — permet des réponses instantanées
+    appContext: {
+      name: 'MonApp',
+      description: 'Plateforme de gestion de projets collaboratifs',
+      features: [
+        { name: 'Dashboard', path: '/dashboard', description: 'Vue d\'ensemble des projets' },
+        { name: 'Kanban', path: '/board', description: 'Tableau de tâches drag & drop' },
+      ],
+      faq: [
+        { question: 'Comment créer un projet ?', answer: 'Menu + > Nouveau projet > Remplir le formulaire' },
+      ],
+      terminology: { sprint: 'période de 2 semaines', story: 'tâche utilisateur' },
+      workflows: ['Créer projet → Ajouter membres → Créer tâches → Suivre'],
+    },
   });
 </script>
 ```
