@@ -1,16 +1,15 @@
 {
-  "name": "@zephyr/widget",
-  "version": "0.3.0",
+  "name": "@zantopia/zephyr-widget",
+  "version": "0.3.1",
   "description": "Zephyr AI Navigation Assistant — Embeddable widget for any web project",
   "type": "module",
-  "main": "dist/zephyr-widget.umd.js",
-  "module": "dist/zephyr-widget.es.js",
-  "types": "dist/types/index.d.ts",
+  "main": "zephyr-widget.js",
+  "module": "zephyr-widget.js",
+  "types": "index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/zephyr-widget.es.js",
-      "require": "./dist/zephyr-widget.umd.js",
-      "types": "./dist/types/index.d.ts"
+      "import": "./zephyr-widget.js",
+      "types": "./index.d.ts"
     },
     "./react": {
       "import": "./react/index.jsx",
@@ -21,15 +20,13 @@
     }
   },
   "files": [
-    "dist/",
+    "zephyr-widget.js",
+    "index.d.ts",
     "react/",
     "vue/",
     "README.md"
   ],
-  "scripts": {
-    "build": "node build.js",
-    "dev": "node build.js --watch"
-  },
+  "scripts": {},
   "peerDependencies": {
     "react": ">=17.0.0",
     "react-dom": ">=17.0.0",
