@@ -3,6 +3,7 @@ Context Builder — Assembles the technical and navigational context
 that agents need to make informed decisions.
 """
 
+import time
 from typing import Any, Optional
 
 from playwright.async_api import Page
@@ -17,6 +18,8 @@ from core.interaction_runner import InteractionRunner
 
 class ContextBuilder:
     """Builds rich contextual data from a target page for agent consumption."""
+
+    MAX_CACHE_ENTRIES = 50  # Bound cache size to prevent memory leaks
 
     def __init__(self):
         self.browser = BrowserEngine()
@@ -37,7 +40,6 @@ class ContextBuilder:
         include_perf: bool = False,
     ) -> dict:
         """Build context for the Dev Agent: errors, DOM, perf, UI issues."""
-        import time
 
         # Smart cache: return cached data if same URL and < 2 min old
         cache_key = f"dev:{session_id}:{viewport or 'desktop'}"
@@ -146,12 +148,19 @@ class ContextBuilder:
                     pass  # Lighthouse not available — skip
 
         finally:
-            if own_page:
+            if own_page and page:
+                try:
+                    await page.close()
+                except Exception:
+                    pass
                 self.console_capture.clear()
                 self.browser.clear_captures()
 
-        # Cache result
-        import time
+        # Cache result (with eviction if over limit)
+        if len(self._context_cache) >= self.MAX_CACHE_ENTRIES:
+            # Evict oldest entry
+            oldest_key = min(self._context_cache, key=lambda k: self._context_cache[k]["timestamp"])
+            del self._context_cache[oldest_key]
         self._context_cache[cache_key] = {"url": url, "data": context, "timestamp": time.time()}
 
         return context
@@ -218,8 +227,11 @@ class ContextBuilder:
                 context["user_journey"] = pages_visited
 
         finally:
-            if own_page:
-                pass  # Page cleanup handled by browser engine
+            if own_page and page:
+                try:
+                    await page.close()
+                except Exception:
+                    pass
 
         return context
 

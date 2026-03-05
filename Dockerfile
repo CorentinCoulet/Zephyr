@@ -1,15 +1,15 @@
 # ============================================
-# Kitsune — UI Intelligence Platform
+# Zephyr — UI Intelligence Platform
 # Multi-stage Docker build
 # ============================================
 
 # --- Stage 1: Build Vue Frontend ---
 FROM node:20-alpine AS frontend-build
 
-WORKDIR /app/kitsune_ui
-COPY kitsune_ui/package.json kitsune_ui/package-lock.json* ./
+WORKDIR /app/zephyr_ui
+COPY zephyr_ui/package.json zephyr_ui/package-lock.json* ./
 RUN npm ci --no-audit
-COPY kitsune_ui/ .
+COPY zephyr_ui/ .
 RUN npm run build
 
 # --- Stage 2: Python Backend ---
@@ -43,16 +43,17 @@ COPY core/ core/
 COPY agents/ agents/
 COPY orchestrator/ orchestrator/
 COPY api/ api/
+COPY mcp_server/ mcp_server/
 
 # Copy built frontend
-COPY --from=frontend-build /app/kitsune_ui/dist kitsune_ui/dist
+COPY --from=frontend-build /app/zephyr_ui/dist zephyr_ui/dist
 
 # Create directories
 RUN mkdir -p reports screenshots baselines
 
 # Environment
-ENV KITSUNE_HOST=0.0.0.0
-ENV KITSUNE_PORT=8000
+ENV ZEPHYR_HOST=0.0.0.0
+ENV ZEPHYR_PORT=8000
 
 EXPOSE 8000
 

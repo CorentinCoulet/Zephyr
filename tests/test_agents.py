@@ -69,7 +69,7 @@ class TestDevAgent:
             ],
         }
         count = agent._count_issues(ctx)
-        assert count >= 4  # 2 console + 1 network + at least accessibility
+        assert count >= 5  # 2 console + 1 network + 2 a11y
 
 
 class TestUserAgent:

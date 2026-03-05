@@ -21,6 +21,7 @@ Configure in VS Code settings.json or .vscode/mcp.json:
 """
 
 import asyncio
+import atexit
 import base64
 import json
 import sys
@@ -100,6 +101,51 @@ async def _get_perf():
     return _perf
 
 
+async def _cleanup():
+    """Close browser and other resources on shutdown."""
+    global _browser
+    if _browser is not None:
+        try:
+            await _browser.close()
+        except Exception:
+            pass
+        _browser = None
+
+
+def _sync_cleanup():
+    """Synchronous wrapper for atexit."""
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            loop.create_task(_cleanup())
+        else:
+            loop.run_until_complete(_cleanup())
+    except Exception:
+        pass
+
+
+atexit.register(_sync_cleanup)
+
+
+def _validate_mcp_url(url: str) -> str:
+    """Validate URL passed to MCP tools (prevent SSRF from IDE)."""
+    import re as _re
+    if not _re.match(r"^https?://", url, _re.IGNORECASE):
+        raise ValueError("URL must start with http:// or https://")
+    if _re.match(r"^(file|ftp|data|javascript|vbscript|gopher):", url, _re.IGNORECASE):
+        raise ValueError("Invalid URL scheme")
+    return url
+
+
+def _sanitize_selector(selector: str) -> str:
+    """Sanitize a CSS selector to prevent JS injection."""
+    # Remove characters that could break out of a JS string
+    dangerous = ["'", '"', "\\", "`", "${", "\n", "\r"]
+    for char in dangerous:
+        selector = selector.replace(char, "")
+    return selector
+
+
 # ═══════════════════════════════════════════════════════════════
 # TOOL: capture_screenshot
 # ═══════════════════════════════════════════════════════════════
@@ -123,6 +169,7 @@ async def capture_screenshot(
     """
     from core.browser_engine import VIEWPORTS
 
+    url = _validate_mcp_url(url)
     browser = await _get_browser()
     vp = VIEWPORTS.get(viewport, VIEWPORTS["desktop"])
     page = await browser.navigate(url, viewport=vp)
@@ -164,6 +211,7 @@ async def capture_multi_viewport(
     """
     from core.browser_engine import VIEWPORTS
 
+    url = _validate_mcp_url(url)
     browser = await _get_browser()
     results = {}
 
@@ -213,6 +261,7 @@ async def analyze_dom(
         include_navigation: Include navigation elements
         max_depth: Max DOM tree depth (1-8)
     """
+    url = _validate_mcp_url(url)
     browser = await _get_browser()
     dom = await _get_dom()
 
@@ -282,6 +331,7 @@ async def get_console_errors(
         include_warnings: Also capture console.warn messages
         wait_ms: Time to wait for errors to appear (ms)
     """
+    url = _validate_mcp_url(url)
     browser = await _get_browser()
     console_cap = await _get_console()
 
@@ -339,6 +389,7 @@ async def audit_performance(url: str) -> str:
     Args:
         url: URL to audit
     """
+    url = _validate_mcp_url(url)
     perf = await _get_perf()
 
     try:
@@ -384,6 +435,7 @@ async def check_accessibility(url: str) -> str:
     Args:
         url: URL to check
     """
+    url = _validate_mcp_url(url)
     browser = await _get_browser()
     dom = await _get_dom()
 
@@ -459,6 +511,7 @@ async def full_page_analysis(
     """
     from core.browser_engine import VIEWPORTS
 
+    url = _validate_mcp_url(url)
     browser = await _get_browser()
     dom = await _get_dom()
     console_cap = await _get_console()
@@ -594,6 +647,7 @@ async def compare_visual(
     from core.browser_engine import VIEWPORTS
     from core.visual_diff import VisualDiff
 
+    url = _validate_mcp_url(url)
     browser = await _get_browser()
     vp = VIEWPORTS.get(viewport, VIEWPORTS["desktop"])
     page = await browser.navigate(url, viewport=vp)
@@ -620,13 +674,16 @@ async def compare_visual(
         "match": result.match,
         "mismatch_percentage": round(result.mismatch_percentage, 2),
         "total_pixels": result.total_pixels,
-        "diff_pixels": result.diff_pixels,
+        "diff_pixels": result.diff_pixel_count,
     }
 
     if result.diff_image:
+        import io as _io
+        buf = _io.BytesIO()
+        result.diff_image.save(buf, format="PNG")
         response["diff_image_base64"] = base64.b64encode(
-            result.diff_image
-        ).decode("utf-8") if isinstance(result.diff_image, bytes) else ""
+            buf.getvalue()
+        ).decode("utf-8")
 
     return json.dumps(response, default=str)
 
@@ -654,6 +711,8 @@ async def interact_with_page(
         value: Text to type (for "type") or option value (for "select")
         screenshot_after: Capture screenshot after interaction
     """
+    url = _validate_mcp_url(url)
+    selector = _sanitize_selector(selector)
     browser = await _get_browser()
     page = await browser.navigate(url)
 
@@ -669,7 +728,9 @@ async def interact_with_page(
         elif action == "select":
             await page.select_option(selector, value, timeout=5000)
         elif action == "scroll":
-            await page.evaluate(f"document.querySelector('{selector}')?.scrollIntoView()")
+            element = await page.query_selector(selector)
+            if element:
+                await element.evaluate("el => el.scrollIntoView()")
         else:
             result["error"] = f"Unknown action '{action}'"
             return json.dumps(result)
@@ -713,6 +774,7 @@ async def inspect_storage(
         url: URL to navigate to before inspecting storage
         include_cookies: Include cookie data in results
     """
+    url = _validate_mcp_url(url)
     browser = await _get_browser()
     dom = await _get_dom()
 
@@ -762,6 +824,8 @@ async def capture_element_screenshot(
         url: URL of the page
         selector: CSS selector of the element to screenshot (e.g., "#my-form", ".navbar")
     """
+    url = _validate_mcp_url(url)
+    selector = _sanitize_selector(selector)
     browser = await _get_browser()
     page = await browser.navigate(url)
 
@@ -811,6 +875,7 @@ async def network_waterfall(
         url: URL to monitor
         wait_ms: Time to wait for requests to complete (ms)
     """
+    url = _validate_mcp_url(url)
     browser = await _get_browser()
     page = await browser.navigate(url)
 
@@ -853,6 +918,7 @@ async def run_interaction_sequence(
     """
     from core.interaction_runner import InteractionRunner, NavigationStep
 
+    url = _validate_mcp_url(url)
     browser = await _get_browser()
     page = await browser.navigate(url)
     runner = InteractionRunner()
@@ -930,8 +996,9 @@ async def check_security_headers(url: str) -> str:
         "cross-origin-resource-policy": {"label": "Cross-Origin-Resource-Policy", "severity": "low"},
     }
 
+    url = _validate_mcp_url(url)
     try:
-        async with _httpx.AsyncClient(follow_redirects=True, verify=False, timeout=15) as client:
+        async with _httpx.AsyncClient(follow_redirects=True, verify=True, timeout=15) as client:
             resp = await client.get(url)
     except Exception as e:
         return json.dumps({"url": url, "error": str(e)})
@@ -978,6 +1045,7 @@ async def detect_framework(url: str) -> str:
     Args:
         url: URL to analyze
     """
+    url = _validate_mcp_url(url)
     browser = await _get_browser()
     dom = await _get_dom()
 
@@ -1009,6 +1077,7 @@ async def search_page_content(
         url: URL to search
         query: Text to search for (case-insensitive)
     """
+    url = _validate_mcp_url(url)
     browser = await _get_browser()
     dom = await _get_dom()
 
@@ -1023,6 +1092,229 @@ async def search_page_content(
         "match_count": len(results),
         "summary": f"{len(results)} résultat(s) trouvé(s) pour '{query}'",
     }, default=str)
+
+
+# ═══════════════════════════════════════════════════════════════
+# TOOL: audit_rgaa
+# ═══════════════════════════════════════════════════════════════
+
+@mcp.tool()
+async def audit_rgaa(
+    url: str,
+    viewport: str = "desktop",
+) -> str:
+    """
+    Audit RGAA 4.1 (accessibilité française) d'une page web.
+
+    Vérifie les 13 thèmes RGAA: images, cadres, couleurs, tableaux,
+    liens, scripts, éléments obligatoires, structure, formulaires,
+    navigation, et consultation.
+
+    Retourne un rapport structuré avec taux de conformité et recommandations.
+
+    Args:
+        url: URL de la page à auditer
+        viewport: Taille d'écran (mobile_s, tablet, desktop)
+    """
+    url = _validate_mcp_url(url)
+    browser = await _get_browser()
+    from core.browser_engine import VIEWPORTS
+    vp = VIEWPORTS.get(viewport, VIEWPORTS["desktop"])
+    page = await browser.navigate(url, viewport=vp)
+
+    try:
+        from core.rgaa_auditor import RGAAAuditor
+        auditor = RGAAAuditor()
+        report = await auditor.audit(page, url=url)
+        data = report.to_dict()
+
+        # Build summary
+        non_conforme = [c for c in data["criteria"] if c["status"] == "non_conforme"]
+        critical = [c for c in non_conforme if c["severity"] == "critical"]
+
+        summary = (
+            f"## Audit RGAA 4.1 — {url}\n\n"
+            f"**Taux de conformité: {data['conformity_rate']}%**\n"
+            f"- Conformes: {data['conforme']}\n"
+            f"- Non conformes: {data['non_conforme']}\n"
+            f"- Non applicables: {data['non_applicable']}\n\n"
+        )
+
+        if critical:
+            summary += "### ⚠️ Critères critiques\n"
+            for c in critical:
+                summary += f"- **{c['criterion_id']}** ({c['theme']}): {c['details']}\n"
+                if c.get("recommendation"):
+                    summary += f"  → {c['recommendation']}\n"
+            summary += "\n"
+
+        non_critical = [c for c in non_conforme if c["severity"] != "critical"]
+        if non_critical:
+            summary += "### Autres non-conformités\n"
+            for c in non_critical:
+                summary += f"- **{c['criterion_id']}** [{c['severity']}] ({c['theme']}): {c['details']}\n"
+
+        return summary
+
+    finally:
+        await page.close()
+
+
+# ═══════════════════════════════════════════════════════════════
+# TOOL: audit_rgpd
+# ═══════════════════════════════════════════════════════════════
+
+@mcp.tool()
+async def audit_rgpd(
+    url: str,
+    viewport: str = "desktop",
+) -> str:
+    """
+    Audit RGPD (GDPR) d'une page web.
+
+    Vérifie: cookies (avant/après consentement), bannière de consentement,
+    trackers tiers, politique de confidentialité, mentions légales,
+    formulaires et consentement, localStorage.
+
+    Args:
+        url: URL de la page à auditer
+        viewport: Taille d'écran
+    """
+    url = _validate_mcp_url(url)
+    browser = await _get_browser()
+    from core.browser_engine import VIEWPORTS
+    vp = VIEWPORTS.get(viewport, VIEWPORTS["desktop"])
+    page = await browser.navigate(url, viewport=vp)
+
+    try:
+        from core.rgpd_auditor import RGPDAuditor
+        auditor = RGPDAuditor()
+        report = await auditor.audit(page, url=url)
+        data = report.to_dict()
+
+        summary = (
+            f"## Audit RGPD — {url}\n\n"
+            f"**Résultat: {data['conforme']}/{data['total_checks']} conformes**\n"
+            f"- Conformes: {data['conforme']}\n"
+            f"- Non conformes: {data['non_conforme']}\n"
+            f"- Avertissements: {data['warnings']}\n"
+            f"- Cookies: {data['cookies_total']} ({data['cookies_third_party']} tiers)\n"
+            f"- Trackers: {data['trackers_detected']}\n\n"
+        )
+
+        non_conforme = [c for c in data["checks"] if c["status"] == "non_conforme"]
+        warnings = [c for c in data["checks"] if c["status"] == "warning"]
+
+        if non_conforme:
+            summary += "### ❌ Non conformités\n"
+            for c in non_conforme:
+                summary += f"- **{c['check_id']}** ({c['category']}): {c['details']}\n"
+                if c.get("recommendation"):
+                    summary += f"  → {c['recommendation']}\n"
+                if c.get("legal_reference"):
+                    summary += f"  📜 {c['legal_reference']}\n"
+            summary += "\n"
+
+        if warnings:
+            summary += "### ⚠️ Avertissements\n"
+            for c in warnings:
+                summary += f"- **{c['check_id']}** ({c['category']}): {c['details']}\n"
+                if c.get("recommendation"):
+                    summary += f"  → {c['recommendation']}\n"
+
+        if data["trackers"]:
+            summary += "\n### Trackers détectés\n"
+            for t in data["trackers"]:
+                summary += f"- **{t['label']}** ({t['category']}) — via {t['detected_via']}\n"
+
+        return summary
+
+    finally:
+        await page.close()
+
+
+# ═══════════════════════════════════════════════════════════════
+# TOOL: audit_compliance
+# ═══════════════════════════════════════════════════════════════
+
+@mcp.tool()
+async def audit_compliance(
+    url: str,
+    viewport: str = "desktop",
+) -> str:
+    """
+    Audit complet de conformité (RGAA 4.1 + RGPD) d'une page web.
+
+    Lance simultanément un audit d'accessibilité RGAA et un audit
+    de protection des données RGPD. Idéal pour une première évaluation.
+
+    Args:
+        url: URL de la page à auditer
+        viewport: Taille d'écran
+    """
+    url = _validate_mcp_url(url)
+    browser = await _get_browser()
+    from core.browser_engine import VIEWPORTS
+    vp = VIEWPORTS.get(viewport, VIEWPORTS["desktop"])
+    page = await browser.navigate(url, viewport=vp)
+
+    try:
+        from core.rgaa_auditor import RGAAAuditor
+        from core.rgpd_auditor import RGPDAuditor
+
+        rgaa_auditor = RGAAAuditor()
+        rgpd_auditor = RGPDAuditor()
+
+        rgaa_report = await rgaa_auditor.audit(page, url=url)
+        rgpd_report = await rgpd_auditor.audit(page, url=url)
+
+        rgaa = rgaa_report.to_dict()
+        rgpd = rgpd_report.to_dict()
+
+        summary = f"## Audit de Conformité Complet — {url}\n\n"
+
+        # RGAA Summary
+        summary += (
+            f"### 🔵 RGAA 4.1 (Accessibilité)\n"
+            f"**Taux de conformité: {rgaa['conformity_rate']}%** "
+            f"({rgaa['conforme']}/{rgaa['total_tested'] - rgaa['non_applicable']} critères)\n\n"
+        )
+
+        rgaa_critical = [c for c in rgaa["criteria"] if c["status"] == "non_conforme" and c["severity"] == "critical"]
+        if rgaa_critical:
+            summary += "Points critiques:\n"
+            for c in rgaa_critical:
+                summary += f"- **{c['criterion_id']}** ({c['theme']}): {c['details']}\n"
+            summary += "\n"
+
+        # RGPD Summary
+        summary += (
+            f"### 🟢 RGPD (Protection des données)\n"
+            f"**{rgpd['conforme']}/{rgpd['total_checks']} conformes** | "
+            f"{rgpd['non_conforme']} non conforme(s) | "
+            f"{rgpd['warnings']} avertissement(s)\n"
+            f"Cookies: {rgpd['cookies_total']} ({rgpd['cookies_third_party']} tiers) | "
+            f"Trackers: {rgpd['trackers_detected']}\n\n"
+        )
+
+        rgpd_nc = [c for c in rgpd["checks"] if c["status"] == "non_conforme"]
+        if rgpd_nc:
+            summary += "Points non conformes:\n"
+            for c in rgpd_nc:
+                summary += f"- **{c['check_id']}**: {c['details']}\n"
+            summary += "\n"
+
+        # Overall score
+        overall_issues = rgaa.get("non_conforme", 0) + rgpd.get("non_conforme", 0)
+        if overall_issues == 0:
+            summary += "✅ **Aucune non-conformité détectée.**\n"
+        else:
+            summary += f"⚠️ **{overall_issues} non-conformité(s) à corriger au total.**\n"
+
+        return summary
+
+    finally:
+        await page.close()
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1057,6 +1349,9 @@ def get_info() -> str:
             "compare_visual — Régression visuelle (baseline/diff)",
             "interact_with_page — Interaction (click, type, hover) + screenshot",
             "run_interaction_sequence — Séquence d'interactions avec screenshots intermédiaires",
+            "audit_rgaa — Audit RGAA 4.1 (accessibilité française, 13 thèmes)",
+            "audit_rgpd — Audit RGPD / GDPR (cookies, consentement, trackers)",
+            "audit_compliance — Audit complet RGAA + RGPD",
         ],
         "usage_tips": [
             "Utilise full_page_analysis en premier pour avoir une vue complète",
@@ -1065,6 +1360,7 @@ def get_info() -> str:
             "Pour tester un flux, utilise run_interaction_sequence",
             "Pour les problèmes d'auth, utilise inspect_storage pour vérifier les tokens",
             "Pour le déploiement, utilise check_security_headers",
+            "Pour la conformité légale, utilise audit_compliance (RGAA + RGPD)",
         ],
     }, indent=2, ensure_ascii=False)
 

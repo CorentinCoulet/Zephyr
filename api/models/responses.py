@@ -3,7 +3,15 @@ Pydantic models for API responses.
 """
 
 from pydantic import BaseModel, Field
-from typing import Any, Optional
+from typing import Optional
+
+
+class ErrorResponse(BaseModel):
+    """Standard error response."""
+    success: bool = False
+    error: str = ""
+    detail: str = ""
+    status_code: int = 500
 
 
 class ZephyrResponse(BaseModel):

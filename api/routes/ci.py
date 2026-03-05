@@ -3,16 +3,21 @@ CI endpoints — Automated quality checks for CI/CD pipelines.
 Returns structured pass/fail results for accessibility, performance, and errors.
 """
 
+import logging
+
 from fastapi import APIRouter, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 
+from api.models.requests import _validate_url
+
+logger = logging.getLogger("zephyr.ci")
 router = APIRouter()
 
 
 class CICheckRequest(BaseModel):
     """Request for CI quality check."""
-    url: str = Field(..., description="URL to check")
+    url: str = Field(..., description="URL to check", max_length=2048)
     thresholds: dict = Field(
         default_factory=lambda: {
             "max_errors": 0,
@@ -24,6 +29,11 @@ class CICheckRequest(BaseModel):
     )
     viewport: str = Field("desktop", description="Viewport to test")
     include_perf: bool = Field(False, description="Include perf audit (slower)")
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: str) -> str:
+        return _validate_url(v)
 
 
 class CICheckResult(BaseModel):
@@ -49,6 +59,7 @@ async def ci_check(req: CICheckRequest, request: Request):
     warnings: list[str] = []
     checks: dict = {}
     all_passed = True
+    page = None
 
     try:
         # Navigate
@@ -62,9 +73,9 @@ async def ci_check(req: CICheckRequest, request: Request):
             )
 
         # 1. Console errors
-        console_errors = browser.get_console_errors()
-        js_errors = [e for e in console_errors if e.get("level") == "error"]
-        js_warnings = [e for e in console_errors if e.get("level") == "warning"]
+        console_messages = browser.get_console_messages()
+        js_errors = [e for e in console_messages if e.type == "error"]
+        js_warnings = [e for e in console_messages if e.type == "warning"]
 
         max_errors = req.thresholds.get("max_errors", 0)
         error_pass = len(js_errors) <= max_errors
@@ -72,7 +83,7 @@ async def ci_check(req: CICheckRequest, request: Request):
             "passed": error_pass,
             "count": len(js_errors),
             "threshold": max_errors,
-            "details": [e.get("text", "") for e in js_errors[:10]],
+            "details": [e.text for e in js_errors[:10]],
         }
         if not error_pass:
             all_passed = False
@@ -89,20 +100,20 @@ async def ci_check(req: CICheckRequest, request: Request):
             warnings.append(f"Console warnings: {len(js_warnings)} (max: {max_warnings})")
 
         # 2. Network errors (4xx/5xx)
-        failed_requests = browser.get_failed_requests()
-        net_pass = len(failed_requests) <= max_errors
+        network_errors = browser.get_network_errors()
+        net_pass = len(network_errors) <= max_errors
         checks["network_errors"] = {
             "passed": net_pass,
-            "count": len(failed_requests),
+            "count": len(network_errors),
             "threshold": max_errors,
             "details": [
-                {"url": r.get("url", ""), "status": r.get("status")}
-                for r in failed_requests[:10]
+                {"url": r.url, "status": r.status}
+                for r in network_errors[:10]
             ],
         }
         if not net_pass:
             all_passed = False
-            errors.append(f"Network errors: {len(failed_requests)}")
+            errors.append(f"Network errors: {len(network_errors)}")
 
         # 3. Accessibility
         from core.dom_extractor import DOMExtractor
@@ -115,7 +126,7 @@ async def ci_check(req: CICheckRequest, request: Request):
             "count": len(a11y_issues),
             "threshold": max_a11y,
             "details": [
-                {"type": i.issue_type, "severity": i.severity, "selector": i.selector}
+                {"type": i.type, "severity": i.severity, "selector": i.selector}
                 for i in a11y_issues[:10]
             ],
         }
@@ -144,7 +155,7 @@ async def ci_check(req: CICheckRequest, request: Request):
 
         # 5. Contrast check
         contrast_issues = await extractor.check_contrast(page)
-        contrast_fails = [c for c in contrast_issues if c.get("ratio", 999) < 4.5]
+        contrast_fails = [c for c in contrast_issues if c.ratio < 4.5]
         checks["contrast"] = {
             "passed": len(contrast_fails) == 0,
             "count": len(contrast_fails),
@@ -177,3 +188,9 @@ async def ci_check(req: CICheckRequest, request: Request):
             summary=f"Check failed: {str(e)}",
             errors=[str(e)],
         )
+    finally:
+        try:
+            if page:
+                await page.close()
+        except Exception:
+            pass

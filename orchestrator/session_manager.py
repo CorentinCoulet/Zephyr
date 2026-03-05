@@ -23,6 +23,7 @@ class SessionState:
     analysis_cache: dict[str, Any] = field(default_factory=dict)
     user_preferences: dict[str, Any] = field(default_factory=dict)
     app_context: dict[str, Any] = field(default_factory=dict)
+    events: list[dict] = field(default_factory=list)
 
     @property
     def is_expired(self) -> bool:
@@ -52,6 +53,18 @@ class SessionState:
             "data": data,
             "timestamp": time.time(),
         }
+
+    def add_event(self, event: dict) -> None:
+        """Add a UX event (click, navigate, form_input, etc.) for friction detection."""
+        event.setdefault("timestamp", time.time())
+        self.events.append(event)
+        # Keep at most 500 events to prevent memory growth
+        if len(self.events) > 500:
+            self.events = self.events[-500:]
+
+    def get_events(self) -> list[dict]:
+        """Get all tracked UX events for friction analysis."""
+        return self.events.copy()
 
     def get_cached(self, key: str, max_age: int = 300) -> Optional[Any]:
         """Get cached analysis result if not too old."""

@@ -4,54 +4,24 @@ Provides guided navigation, onboarding, contextual help, and UX friction detecti
 """
 
 import json
+from pathlib import Path
 from typing import Any, Optional
 
 from agents.base_agent import BaseAgent, AgentResponse
 
 
-SYSTEM_PROMPT = """Tu es Zephyr 🦊 en mode Guide Utilisateur — un assistant IA bienveillant qui aide les utilisateurs à naviguer dans une application web.
+_PROMPTS_DIR = Path(__file__).parent / "prompts"
 
-## Ton rôle
-- Guider l'utilisateur pas-à-pas pour accomplir ses tâches
-- Expliquer l'interface en langage simple et accessible
-- Proposer un onboarding interactif pour les nouveaux utilisateurs
-- Détecter quand l'utilisateur est perdu et proposer de l'aide
-- Expliquer ce que font les boutons et éléments de la page
 
-## Ton style
-- Chaleureux, patient et encourageant
-- Tu utilises un langage simple, sans jargon technique
-- Tu structures tes guides en étapes numérotées claires
-- Tu utilises des émojis pour rendre le guide agréable (📍 étape, ✅ fait, 👆 action, 💡 astuce)
-- Tu adaptes ton niveau de détail au profil de l'utilisateur
+def _load_prompt(name: str) -> str:
+    """Load a prompt template from the prompts directory."""
+    path = _PROMPTS_DIR / f"{name}.md"
+    if path.exists():
+        return path.read_text(encoding="utf-8").strip()
+    return ""
 
-## Niveau de verbosité
-- minimal : réponses courtes, étapes essentielles uniquement
-- normal : explication claire avec contexte
-- detailed : très détaillé, chaque étape expliquée en profondeur
 
-## Format de guide pas-à-pas
-📍 **Étape X/N** : Description de l'action
-👆 Ce que l'utilisateur doit faire
-💡 Astuce ou information complémentaire
-
-## Quand l'utilisateur demande de l'aide
-1. Identifie sa page actuelle et son objectif
-2. Trouve le chemin le plus court pour atteindre son but
-3. Génère un guide étape par étape avec des éléments visuels précis
-4. Propose des alternatives si le chemin principal n'est pas clair
-
-## Contexte
-Tu reçois en contexte : la structure de navigation du site, les éléments interactifs de la page, les formulaires, et la position actuelle de l'utilisateur.
-Si des préférences utilisateur sont fournies, adapte ton style en conséquence.
-
-## Contexte applicatif (fourni par le développeur)
-Si un contexte applicatif est fourni, utilise-le EN PRIORITÉ pour répondre aux questions.
-Ce contexte décrit l'application, ses fonctionnalités, son vocabulaire métier et ses workflows.
-Il est plus fiable que l'analyse du DOM pour les questions métier.
-Si la réponse est dans le contexte applicatif, réponds directement sans hésiter.
-Si la FAQ contient une réponse exacte, utilise-la telle quelle.
-"""
+SYSTEM_PROMPT = _load_prompt("user_system")
 
 # Onboarding step tracking per session
 _onboarding_progress: dict[str, dict] = {}  # session_id -> {"completed_steps": set, "total_steps": int}
@@ -273,8 +243,9 @@ Aide l'utilisateur de manière simple et guidée."""
             _onboarding_progress[session_id] = {"completed_steps": set(), "total_steps": len(steps)}
         return response
 
-    def mark_onboarding_step(self, session_id: str, step: int) -> dict:
+    def mark_onboarding_step(self, session_id: str, step: int | str) -> dict:
         """Mark an onboarding step as completed."""
+        step = int(step)  # Normalize to int
         if session_id not in _onboarding_progress:
             _onboarding_progress[session_id] = {"completed_steps": set(), "total_steps": 0}
         _onboarding_progress[session_id]["completed_steps"].add(step)

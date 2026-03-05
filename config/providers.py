@@ -11,6 +11,8 @@ Supported providers:
   - ollama           (Local Ollama inference)
 """
 
+import asyncio
+import logging
 import os
 import re
 from abc import ABC, abstractmethod
@@ -20,6 +22,8 @@ from typing import Any, Optional
 
 import httpx
 import yaml
+
+logger = logging.getLogger("zephyr.providers")
 
 
 # ── Configuration loader ─────────────────────────────────────
@@ -71,6 +75,10 @@ class ServerConfig:
     @property
     def temperature(self) -> float:
         return self.provider_config.get("temperature", 0.3)
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return self.server.get("cors_origins", ["*"])
 
 
 def load_server_config(path: Optional[str] = None) -> ServerConfig:
@@ -153,17 +161,69 @@ class LLMProviderBase(ABC):
 
     def __init__(self, config: dict, http_client: Optional[httpx.AsyncClient] = None):
         self.config = config
-        self._client = http_client or httpx.AsyncClient(timeout=config.get("timeout", 30))
+        self._client = http_client or httpx.AsyncClient(
+            timeout=httpx.Timeout(
+                connect=10.0,
+                read=config.get("timeout", 30),
+                write=10.0,
+                pool=10.0,
+            )
+        )
+        self._retry_count = config.get("retry_count", 2)
+        self._retry_delay = config.get("retry_delay", 1.0)
 
     @abstractmethod
+    async def _do_chat(
+        self,
+        messages: list[dict],
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> str:
+        """Internal chat implementation (no retry)."""
+        ...
+
     async def chat(
         self,
         messages: list[dict],
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
     ) -> str:
-        """Send chat messages and return the assistant's reply."""
-        ...
+        """Send chat messages with automatic retry on transient errors."""
+        last_exception = None
+        for attempt in range(1, self._retry_count + 2):  # +1 for initial + retries
+            try:
+                return await self._do_chat(messages, temperature, max_tokens)
+            except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.ConnectError) as e:
+                last_exception = e
+                if attempt <= self._retry_count:
+                    delay = self._retry_delay * attempt
+                    logger.warning(
+                        f"LLM request failed (attempt {attempt}/{self._retry_count + 1}): {e}. "
+                        f"Retrying in {delay}s..."
+                    )
+                    await asyncio.sleep(delay)
+            except httpx.HTTPStatusError as e:
+                # Retry on 429 (rate limit) and 5xx (server errors)
+                if e.response.status_code in (429, 500, 502, 503, 504) and attempt <= self._retry_count:
+                    delay = self._retry_delay * attempt
+                    retry_after = e.response.headers.get("retry-after")
+                    if retry_after:
+                        try:
+                            delay = max(delay, float(retry_after))
+                        except ValueError:
+                            pass
+                    logger.warning(
+                        f"LLM HTTP {e.response.status_code} (attempt {attempt}). "
+                        f"Retrying in {delay}s..."
+                    )
+                    await asyncio.sleep(delay)
+                    last_exception = e
+                else:
+                    raise
+            except Exception:
+                raise
+
+        raise last_exception  # type: ignore
 
     async def close(self):
         await self._client.aclose()
@@ -176,7 +236,7 @@ class GitHubCopilotProvider(LLMProviderBase):
     Works with GitHub Copilot subscriptions.
     """
 
-    async def chat(self, messages, temperature=None, max_tokens=None) -> str:
+    async def _do_chat(self, messages, temperature=None, max_tokens=None) -> str:
         endpoint = self.config.get("endpoint", "https://models.inference.ai.azure.com")
         token = self.config.get("token", os.environ.get("GITHUB_TOKEN", ""))
         model = self.config.get("model", "gpt-4o")
@@ -201,7 +261,7 @@ class GitHubCopilotProvider(LLMProviderBase):
 class ClaudeProvider(LLMProviderBase):
     """Anthropic Claude API provider."""
 
-    async def chat(self, messages, temperature=None, max_tokens=None) -> str:
+    async def _do_chat(self, messages, temperature=None, max_tokens=None) -> str:
         api_key = self.config.get("api_key", os.environ.get("ANTHROPIC_API_KEY", ""))
         model = self.config.get("model", "claude-sonnet-4-20250514")
 
@@ -236,7 +296,7 @@ class ClaudeProvider(LLMProviderBase):
 class OpenAIProvider(LLMProviderBase):
     """OpenAI API provider."""
 
-    async def chat(self, messages, temperature=None, max_tokens=None) -> str:
+    async def _do_chat(self, messages, temperature=None, max_tokens=None) -> str:
         api_key = self.config.get("api_key", os.environ.get("OPENAI_API_KEY", ""))
         model = self.config.get("model", "gpt-4o")
 
@@ -282,7 +342,7 @@ class OpenAIProvider(LLMProviderBase):
 class OllamaProvider(LLMProviderBase):
     """Ollama local inference provider."""
 
-    async def chat(self, messages, temperature=None, max_tokens=None) -> str:
+    async def _do_chat(self, messages, temperature=None, max_tokens=None) -> str:
         base_url = self.config.get("base_url", "http://localhost:11434")
         model = self.config.get("model", "llama3")
 

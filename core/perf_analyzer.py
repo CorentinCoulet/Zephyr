@@ -5,7 +5,7 @@ Runs audits, compares reports, extracts optimisation opportunities.
 
 import asyncio
 import json
-import subprocess
+import re
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -71,35 +71,43 @@ class PerfAnalyzer:
 
     LIGHTHOUSE_CMD = "lighthouse"
 
+    @staticmethod
+    def _validate_lighthouse_url(url: str) -> str:
+        """Validate URL to prevent command injection."""
+        if not re.match(r"^https?://[^\s;|&`$]+$", url):
+            raise ValueError(f"Invalid URL for Lighthouse audit: {url}")
+        return url
+
     async def run_audit(
         self, url: str, config: Optional[AuditConfig] = None
     ) -> dict:
         """Run a Lighthouse audit and return the raw JSON report."""
         cfg = config or AuditConfig()
+        url = self._validate_lighthouse_url(url)
 
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
             output_path = tmp.name
 
-        categories_flags = " ".join(
-            f"--only-categories={cat}" for cat in cfg.categories
-        )
+        # Build argument list (safe — no shell interpretation)
+        args = [
+            self.LIGHTHOUSE_CMD,
+            url,
+            "--output=json",
+            f"--output-path={output_path}",
+            "--chrome-flags=--headless --no-sandbox --disable-gpu",
+            f"--form-factor={cfg.form_factor}",
+            f"--max-wait-for-load={cfg.max_wait_for_load}",
+            "--quiet",
+        ]
 
-        cmd = (
-            f"{self.LIGHTHOUSE_CMD} {url} "
-            f"--output=json "
-            f"--output-path={output_path} "
-            f"--chrome-flags='--headless --no-sandbox --disable-gpu' "
-            f"--form-factor={cfg.form_factor} "
-            f"--max-wait-for-load={cfg.max_wait_for_load} "
-            f"{categories_flags} "
-            f"--quiet"
-        )
+        for cat in cfg.categories:
+            args.append(f"--only-categories={cat}")
 
         if not cfg.throttling:
-            cmd += " --throttling-method=provided"
+            args.append("--throttling-method=provided")
 
-        proc = await asyncio.create_subprocess_shell(
-            cmd,
+        proc = await asyncio.create_subprocess_exec(
+            *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -111,6 +119,8 @@ class PerfAnalyzer:
             report_path.unlink(missing_ok=True)
             return report
         except Exception as e:
+            # Clean up temp file on failure
+            Path(output_path).unlink(missing_ok=True)
             return {
                 "error": str(e),
                 "stderr": stderr.decode() if stderr else "",

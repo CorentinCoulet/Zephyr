@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
 from PIL import Image, ImageChops, ImageDraw
 
 
@@ -118,12 +119,10 @@ class VisualDiff:
         diff_img = ImageChops.difference(img_a, img_b)
         total_pixels = img_a.size[0] * img_a.size[1]
 
-        # Count non-zero pixels
-        diff_pixels = 0
-        diff_data = diff_img.getdata()
-        for pixel in diff_data:
-            if any(c > 10 for c in pixel):  # Small tolerance
-                diff_pixels += 1
+        # Count non-zero pixels using numpy (vectorized, ~100x faster)
+        diff_arr = np.asarray(diff_img)  # shape (H, W, 3)
+        diff_mask = np.any(diff_arr > 10, axis=2)  # tolerance: ignore tiny diffs
+        diff_pixels = int(np.count_nonzero(diff_mask))
 
         mismatch_pct = (diff_pixels / total_pixels) * 100 if total_pixels > 0 else 0
         thresh = threshold or self.DIFF_THRESHOLD
@@ -231,16 +230,12 @@ class VisualDiff:
         combined.paste(img_a, (0, 0))
         combined.paste(img_b, (w * 2, 0))
 
-        # Create diff overlay on top of before image
-        overlay = img_a.copy()
-        draw = ImageDraw.Draw(overlay)
-        diff_data = list(diff.getdata())
-
-        for i, pixel in enumerate(diff_data):
-            if any(c > 10 for c in pixel):
-                x = i % w
-                y = i // w
-                draw.point((x, y), fill=self.DIFF_COLOR)
+        # Create diff overlay on top of before image using numpy (vectorized)
+        overlay_arr = np.asarray(img_a).copy()  # shape (H, W, 3)
+        diff_arr = np.asarray(diff)
+        mask = np.any(diff_arr > 10, axis=2)  # (H, W) boolean mask
+        overlay_arr[mask] = self.DIFF_COLOR
+        overlay = Image.fromarray(overlay_arr)
 
         combined.paste(overlay, (w, 0))
         return combined

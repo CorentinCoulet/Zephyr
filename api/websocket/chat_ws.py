@@ -3,13 +3,19 @@ WebSocket endpoint for real-time chat with Zephyr.
 Supports both Dev and User agent modes with automatic routing.
 """
 
+import hmac
 import json
+import logging
 import uuid
 from typing import Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from api.models.requests import _validate_url
 from orchestrator.router import Router, AgentTarget
+from config.settings import settings
+
+logger = logging.getLogger("zephyr.ws")
 
 router = APIRouter()
 
@@ -39,6 +45,20 @@ manager = ConnectionManager()
 @router.websocket("/ws/chat")
 async def websocket_chat(websocket: WebSocket):
     """WebSocket endpoint for real-time chat with Zephyr."""
+
+    # ── Authentication ──
+    # Validate API key if one is configured (via query param or header)
+    expected_key = settings.widget_api_key
+    if expected_key:
+        provided_key = (
+            websocket.query_params.get("api_key")
+            or websocket.headers.get("x-api-key", "")
+        )
+        if not provided_key or not hmac.compare_digest(
+            provided_key.encode(), expected_key.encode()
+        ):
+            await websocket.close(code=4403, reason="Invalid or missing API key")
+            return
 
     session_id = websocket.query_params.get("session_id", str(uuid.uuid4()))
     await manager.connect(websocket, session_id)
@@ -75,6 +95,18 @@ async def websocket_chat(websocket: WebSocket):
             url = data.get("url", session.target_url)
             forced_mode = data.get("mode")
             incoming_app_context = data.get("app_context")
+
+            # Validate URL from WS message (prevent SSRF)
+            if url and url != session.target_url:
+                try:
+                    url = _validate_url(url)
+                except ValueError as e:
+                    await manager.send_json(session_id, {
+                        "type": "error",
+                        "message": f"URL invalide : {e}",
+                        "expression": "surprised",
+                    })
+                    continue
 
             # Handle app_context messages (sent on connect or via setAppContext)
             if data.get("type") == "app_context" and incoming_app_context:
@@ -153,9 +185,10 @@ async def websocket_chat(websocket: WebSocket):
                 })
 
             except Exception as e:
+                logger.error(f"Chat error session={session_id}: {e}", exc_info=True)
                 await manager.send_json(session_id, {
                     "type": "error",
-                    "message": f"Une erreur est survenue : {str(e)}",
+                    "message": "Une erreur interne est survenue. Veuillez réessayer.",
                     "expression": "surprised",
                 })
 

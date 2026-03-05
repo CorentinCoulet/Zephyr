@@ -2,7 +2,6 @@
 Screenshot Manager — Manages screenshot capture, storage, and retrieval.
 """
 
-import hashlib
 import time
 from pathlib import Path
 from typing import Optional

@@ -12,17 +12,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-import httpx
-
-# New provider system (reads zephyr.server.yaml)
+# Provider system (reads zephyr.server.yaml)
 from config.providers import get_provider, get_server_config, LLMProviderBase
-
-# Backward compat: still importable but no longer used internally
-try:
-    from config.llm_config import llm_config, LLMProvider
-except ImportError:
-    llm_config = None
-    LLMProvider = None
 
 
 @dataclass
@@ -63,14 +54,12 @@ class BaseAgent(ABC):
 
     agent_name: str = "base"
     agent_mode: str = "generic"  # "dev" or "user"
+    MAX_CONVERSATION_LENGTH = 50  # Max messages per session before trimming
 
     def __init__(self):
         self._conversations: dict[str, list[AgentMessage]] = {}
         self._provider: LLMProviderBase = get_provider()
         self._server_config = get_server_config()
-        self._http_client = httpx.AsyncClient(
-            timeout=self._server_config.provider_config.get("timeout", 30)
-        )
 
     @abstractmethod
     def get_system_prompt(self) -> str:
@@ -113,6 +102,11 @@ class BaseAgent(ABC):
             AgentMessage(role="assistant", content=response.message)
         )
 
+        # Trim conversation if too long (keep system prompt + last N messages)
+        if len(self._conversations[sid]) > self.MAX_CONVERSATION_LENGTH:
+            system_msg = self._conversations[sid][0]
+            self._conversations[sid] = [system_msg] + self._conversations[sid][-self.MAX_CONVERSATION_LENGTH + 1:]
+
         return response
 
     async def call_llm(
@@ -133,81 +127,6 @@ class BaseAgent(ABC):
             max_tokens=max_tokens,
         )
 
-    # ── Legacy provider methods (kept for backward compat) ──────
-
-    async def _call_openai(
-        self, messages: list[dict], temperature: float, max_tokens: int
-    ) -> str:
-        """Call OpenAI-compatible API. (Legacy — use call_llm instead)"""
-        response = await self._http_client.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {llm_config.api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": llm_config.model,
-                "messages": messages,
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-            },
-        )
-        response.raise_for_status()
-        data = response.json()
-        return data["choices"][0]["message"]["content"]
-
-    async def _call_anthropic(
-        self, messages: list[dict], temperature: float, max_tokens: int
-    ) -> str:
-        """Call Anthropic Claude API. (Legacy — use call_llm instead)"""
-        # Extract system message
-        system_msg = ""
-        chat_messages = []
-        for msg in messages:
-            if msg["role"] == "system":
-                system_msg = msg["content"]
-            else:
-                chat_messages.append(msg)
-
-        response = await self._http_client.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": llm_config.anthropic_api_key or llm_config.api_key,
-                "Content-Type": "application/json",
-                "anthropic-version": "2023-06-01",
-            },
-            json={
-                "model": llm_config.anthropic_model,
-                "system": system_msg,
-                "messages": chat_messages,
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-            },
-        )
-        response.raise_for_status()
-        data = response.json()
-        return data["content"][0]["text"]
-
-    async def _call_ollama(
-        self, messages: list[dict], temperature: float, max_tokens: int
-    ) -> str:
-        """Call Ollama local API. (Legacy — use call_llm instead)"""
-        response = await self._http_client.post(
-            f"{llm_config.ollama_base_url}/api/chat",
-            json={
-                "model": llm_config.ollama_model,
-                "messages": messages,
-                "options": {
-                    "temperature": temperature,
-                    "num_predict": max_tokens,
-                },
-                "stream": False,
-            },
-        )
-        response.raise_for_status()
-        data = response.json()
-        return data["message"]["content"]
-
     def get_conversation(self, session_id: str) -> list[AgentMessage]:
         """Get the conversation history for a session."""
         return self._conversations.get(session_id, [])
@@ -218,5 +137,4 @@ class BaseAgent(ABC):
 
     async def close(self) -> None:
         """Clean up resources."""
-        await self._http_client.aclose()
         await self._provider.close()

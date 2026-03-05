@@ -2,7 +2,7 @@
 Reports endpoints — Session history, report export (JSON / Markdown / HTML).
 """
 
-import time
+import html as html_escape_mod
 
 from fastapi import APIRouter, Request, Query
 from fastapi.responses import JSONResponse, HTMLResponse, PlainTextResponse
@@ -185,7 +185,7 @@ def _render_markdown(data: dict, session) -> str:
 
 
 def _render_html(data: dict, session) -> str:
-    """Render a session report as HTML."""
+    """Render a session report as HTML (XSS-safe)."""
     md = _render_markdown(data, session)
     # Simple markdown-to-html conversion
     html_body = md
@@ -193,12 +193,18 @@ def _render_html(data: dict, session) -> str:
     html_body = html_body.replace("\n## ", "\n<h2>")
     html_body = html_body.replace("\n### ", "\n<h3>")
 
+    # Sanitize user-controlled content to prevent XSS
+    safe_mode = html_escape_mod.escape(data['mode'])
+    safe_url = html_escape_mod.escape(data.get('target_url', ''))
+    safe_session_id = html_escape_mod.escape(data['session_id'][:8])
+    safe_md = html_escape_mod.escape(md)
+
     # Wrap in proper HTML
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Zephyr Report — {data['session_id'][:8]}</title>
+    <title>Zephyr Report — {safe_session_id}</title>
     <style>
         body {{ font-family: -apple-system, system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; line-height: 1.6; color: #333; }}
         h1 {{ color: #ff6b35; border-bottom: 2px solid #ff6b35; padding-bottom: 0.5rem; }}
@@ -210,10 +216,10 @@ def _render_html(data: dict, session) -> str:
 </head>
 <body>
     <div class="meta">
-        <strong>Mode:</strong> {data['mode']} |
-        <strong>URL:</strong> {data['target_url']} |
+        <strong>Mode:</strong> {safe_mode} |
+        <strong>URL:</strong> {safe_url} |
         <strong>Messages:</strong> {data['conversation_count']}
     </div>
-    <pre>{md}</pre>
+    <pre>{safe_md}</pre>
 </body>
 </html>"""

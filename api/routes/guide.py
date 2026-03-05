@@ -177,6 +177,18 @@ class OnboardingStepRequest(BaseModel):
     step_id: str = Field(..., description="Step identifier to mark complete")
 
 
+class PreferencesUpdateRequest(BaseModel):
+    """Request to update user preferences."""
+    session_id: str = Field(..., description="Session ID")
+    preferences: dict = Field(default_factory=dict, description="Preferences to update")
+
+
+class AppContextRequest(BaseModel):
+    """Request to set application context."""
+    session_id: str = Field(..., description="Session ID")
+    app_context: dict = Field(..., description="Application context")
+
+
 @router.post("/guide/friction")
 async def analyze_friction(req: FrictionRequest, request: Request):
     """Proactively detect UX friction points on a page."""
@@ -190,11 +202,14 @@ async def analyze_friction(req: FrictionRequest, request: Request):
         url=req.url, session_id=session.session_id
     )
 
-    result = await user_agent.analyze_friction(context)
+    # Build session events from conversation history for friction detection
+    session_events = session.get_events()
+    result = await user_agent.analyze_friction(session_events, context)
     return {
         "success": True,
         "url": req.url,
-        "friction_points": result,
+        "friction_points": result.message if hasattr(result, 'message') else result,
+        "expression": result.expression if hasattr(result, 'expression') else "neutral",
         "session_id": session.session_id,
     }
 
@@ -212,11 +227,12 @@ async def page_tooltips(req: TooltipRequest, request: Request):
         url=req.url, session_id=session.session_id
     )
 
-    tooltips = await user_agent.generate_page_tooltips(context, max_tooltips=req.max_tooltips)
+    result = await user_agent.generate_page_tooltips(context)
     return {
         "success": True,
         "url": req.url,
-        "tooltips": tooltips,
+        "tooltips": result.message if hasattr(result, 'message') else result,
+        "expression": result.expression if hasattr(result, 'expression') else "neutral",
         "session_id": session.session_id,
     }
 
@@ -263,17 +279,10 @@ async def reset_onboarding_endpoint(session_id: str, request: Request):
 
 
 @router.put("/guide/preferences")
-async def update_user_preferences(request: Request):
+async def update_user_preferences(req: PreferencesUpdateRequest, request: Request):
     """Update user preferences for a session (language, verbosity, etc.)."""
-    body = await request.json()
-    session_id = body.get("session_id")
-    preferences = body.get("preferences", {})
-
-    if not session_id:
-        return {"success": False, "error": "session_id required"}
-
     session_mgr = request.app.state.session_manager
-    session = session_mgr.get_session(session_id)
+    session = session_mgr.get_session(req.session_id)
     if not session:
         return {"success": False, "error": "Session not found"}
 
@@ -281,45 +290,39 @@ async def update_user_preferences(request: Request):
         "language", "verbosity", "expertise_level",
         "accessibility_mode", "notification_level",
     }
-    filtered = {k: v for k, v in preferences.items() if k in allowed}
+    filtered = {k: v for k, v in req.preferences.items() if k in allowed}
     session.user_preferences.update(filtered)
 
     return {
         "success": True,
-        "session_id": session_id,
+        "session_id": req.session_id,
         "preferences": session.user_preferences,
     }
 
 
 @router.put("/guide/app-context")
-async def set_app_context(request: Request):
+async def set_app_context(req: AppContextRequest, request: Request):
     """Set or update the application context for a session.
 
     The application context is provided by the developer who integrates Zephyr.
     It gives the chatbot pre-built knowledge about the app (features, FAQ,
     terminology, workflows) so it can answer user questions faster.
     """
-    body = await request.json()
-    session_id = body.get("session_id")
-    app_context = body.get("app_context", {})
-
-    if not session_id:
-        return {"success": False, "error": "session_id required"}
-    if not app_context:
+    if not req.app_context:
         return {"success": False, "error": "app_context required"}
 
     session_mgr = request.app.state.session_manager
-    session = session_mgr.get_session(session_id)
+    session = session_mgr.get_session(req.session_id)
     if not session:
         return {"success": False, "error": "Session not found"}
 
-    session.app_context = app_context
+    session.app_context = req.app_context
 
     return {
         "success": True,
-        "session_id": session_id,
+        "session_id": req.session_id,
         "message": "App context updated",
-        "context_keys": list(app_context.keys()),
+        "context_keys": list(req.app_context.keys()),
     }
 
 

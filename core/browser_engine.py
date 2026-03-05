@@ -3,7 +3,7 @@ Browser Engine — Playwright-based headless browser management.
 Handles browser lifecycle, page navigation, screenshot capture, and JS evaluation.
 """
 
-import asyncio
+import time
 from pathlib import Path
 from typing import Any, Optional
 
@@ -123,6 +123,8 @@ class NetworkRequest:
 class BrowserEngine:
     """Manages the headless Chromium browser lifecycle via Playwright."""
 
+    MAX_CONTEXTS = 10  # Maximum concurrent browser contexts
+
     def __init__(self):
         self._playwright: Optional[Playwright] = None
         self._browser: Optional[Browser] = None
@@ -151,6 +153,14 @@ class BrowserEngine:
         if not self._browser:
             await self.launch()
 
+        # Evict oldest contexts if at capacity
+        while len(self._contexts) >= self.MAX_CONTEXTS:
+            oldest = self._contexts.pop(0)
+            try:
+                await oldest.close()
+            except Exception:
+                pass
+
         vp = viewport.to_dict() if viewport else VIEWPORTS["desktop"].to_dict()
         context = await self._browser.new_context(
             viewport=vp,
@@ -165,7 +175,10 @@ class BrowserEngine:
         viewport: Optional[Viewport] = None,
         wait_until: str = "networkidle",
     ) -> Page:
-        """Navigate to a URL and return the page object."""
+        """Navigate to a URL and return the page object. Clears previous captures."""
+        # Clear previous captures to isolate per-navigation
+        self.clear_captures()
+
         context = await self.new_context(viewport)
         page = await context.new_page()
 
@@ -294,12 +307,10 @@ class BrowserEngine:
 
     def _on_request_start(self, request) -> None:
         """Track request start time for waterfall."""
-        import time
         self._request_start_times[request.url + request.method] = time.time()
 
     def _on_response(self, response) -> None:
         """Track completed responses including 4xx/5xx."""
-        import time
         request = response.request
         key = request.url + request.method
         start = self._request_start_times.pop(key, None)
@@ -335,7 +346,6 @@ class BrowserEngine:
             )
 
     def _on_request_failed(self, request) -> None:
-        import time
         key = request.url + request.method
         start = self._request_start_times.pop(key, None)
         timing_ms = (time.time() - start) * 1000 if start else 0

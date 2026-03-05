@@ -2,16 +2,28 @@
 Widget endpoints — Serves the embeddable SDK and handles widget-specific auth.
 """
 
+import hmac
 from pathlib import Path
 
 from fastapi import APIRouter, Request, Header, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
+from pydantic import BaseModel, Field
+from typing import Optional
 
 from config.settings import settings
 
 router = APIRouter()
 
 SDK_DIR = Path(__file__).parent.parent.parent / "sdk"
+
+
+def _validate_api_key(provided: Optional[str]) -> None:
+    """Validate API key using timing-safe comparison."""
+    expected = settings.widget_api_key
+    if not expected:
+        return  # No key configured = no auth
+    if not provided or not hmac.compare_digest(provided.encode(), expected.encode()):
+        raise HTTPException(403, "Invalid API key")
 
 
 @router.get("/sdk/zephyr-widget.js")
@@ -59,9 +71,7 @@ async def widget_snippet():
 @router.get("/sdk/config")
 async def widget_config(request: Request, x_api_key: str = Header(None)):
     """Returns full widget configuration (validates API key if set)."""
-    expected = settings.widget_api_key
-    if expected and x_api_key != expected:
-        raise HTTPException(403, "Invalid API key")
+    _validate_api_key(x_api_key)
 
     return {
         "personas": ["mascot", "spirit", "minimal", "futuristic"],
@@ -87,29 +97,28 @@ async def widget_config(request: Request, x_api_key: str = Header(None)):
     }
 
 
+class WidgetPreferencesRequest(BaseModel):
+    session_id: Optional[str] = None
+    preferences: dict = Field(default_factory=dict)
+
+
 @router.put("/sdk/config/preferences")
 async def update_preferences(
-    request: Request, x_api_key: str = Header(None)
+    req: WidgetPreferencesRequest, request: Request, x_api_key: str = Header(None)
 ):
     """Update per-session widget preferences (language, verbosity, etc.)."""
-    expected = settings.widget_api_key
-    if expected and x_api_key != expected:
-        raise HTTPException(403, "Invalid API key")
-
-    body = await request.json()
-    session_id = body.get("session_id")
-    preferences = body.get("preferences", {})
+    _validate_api_key(x_api_key)
 
     allowed_keys = {
         "language", "verbosity", "expertise_level", "theme",
         "persona", "position", "size", "accessibility_mode",
         "keyboard_shortcuts",
     }
-    filtered = {k: v for k, v in preferences.items() if k in allowed_keys}
+    filtered = {k: v for k, v in req.preferences.items() if k in allowed_keys}
 
-    if session_id:
+    if req.session_id:
         session_mgr = request.app.state.session_manager
-        session = session_mgr.get_session(session_id)
+        session = session_mgr.get_session(req.session_id)
         if session:
             session.user_preferences.update(filtered)
 
