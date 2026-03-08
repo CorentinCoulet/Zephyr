@@ -1,6 +1,6 @@
 {
   "name": "@zantopia/zephyr-widget",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Zephyr AI Navigation Assistant — Embeddable widget for any web project",
   "type": "module",
   "main": "zephyr-widget.js",

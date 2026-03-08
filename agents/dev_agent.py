@@ -30,7 +30,7 @@ class DevAgent(BaseAgent):
     agent_name = "dev_agent"
     agent_mode = "dev"
 
-    def get_system_prompt(self) -> str:
+    def get_system_prompt(self, preferences: Optional[dict] = None) -> str:
         return SYSTEM_PROMPT
 
     async def process(

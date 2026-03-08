@@ -4,10 +4,13 @@ Click, hover, scroll, drag & drop, form filling, navigation sequences, auth flow
 """
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from typing import Any, Optional
 
 from playwright.async_api import Page
+
+logger = logging.getLogger("zephyr.core.interaction")
 
 
 @dataclass
@@ -206,6 +209,7 @@ class InteractionRunner:
         self, page: Page, steps: list[NavigationStep]
     ) -> list[InteractionResult]:
         """Execute a sequence of navigation steps."""
+        logger.info("Running navigation sequence (%d steps)", len(steps))
         results = []
         for step in steps:
             if step.action == "click":
@@ -252,6 +256,7 @@ class InteractionRunner:
         self, page: Page, config: AuthConfig
     ) -> InteractionResult:
         """Perform a login flow."""
+        logger.info("Authenticating at %s", config.login_url)
         try:
             await page.goto(config.login_url, wait_until="networkidle")
             await page.fill(config.username_selector, config.username)

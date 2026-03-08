@@ -32,7 +32,7 @@ class Settings(BaseSettings):
 
     # --- App ---
     app_name: str = "Zephyr Intelligence Platform"
-    app_version: str = "0.3.1"
+    app_version: str = "0.4.0"
     debug: bool = False
     host: str = "0.0.0.0"
     port: int = 8000
@@ -51,6 +51,7 @@ class Settings(BaseSettings):
 
     # --- Browser ---
     browser_headless: bool = True
+    browser_ignore_https_errors: bool = True  # Set False when TLS matters
     browser_max_pages: int = 3
     browser_timeout: int = 30_000  # ms
     default_viewports: list[dict] = Field(default=[

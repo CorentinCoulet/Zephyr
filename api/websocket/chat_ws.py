@@ -6,6 +6,7 @@ Supports both Dev and User agent modes with automatic routing.
 import hmac
 import json
 import logging
+import time
 import uuid
 from typing import Optional
 
@@ -19,19 +20,45 @@ logger = logging.getLogger("zephyr.ws")
 
 router = APIRouter()
 
+# --- WebSocket limits ---
+WS_MAX_MESSAGE_SIZE = 32_768  # 32 KB per message
+WS_RATE_LIMIT_PER_SEC = 5     # Max messages per second
+WS_RATE_LIMIT_WINDOW = 60     # Window for sustained rate (messages per minute)
+WS_RATE_LIMIT_PER_MIN = 30    # Max messages per minute
+
 
 class ConnectionManager:
     """Manages active WebSocket connections."""
 
     def __init__(self):
         self.active_connections: dict[str, WebSocket] = {}
+        self._msg_timestamps: dict[str, list[float]] = {}  # rate limit tracking
 
     async def connect(self, websocket: WebSocket, session_id: str) -> None:
         await websocket.accept()
         self.active_connections[session_id] = websocket
+        self._msg_timestamps[session_id] = []
 
     def disconnect(self, session_id: str) -> None:
         self.active_connections.pop(session_id, None)
+        self._msg_timestamps.pop(session_id, None)
+
+    def check_rate_limit(self, session_id: str) -> bool:
+        """Returns True if the message should be allowed."""
+        now = time.time()
+        timestamps = self._msg_timestamps.get(session_id, [])
+        # Remove entries older than 60s
+        timestamps = [t for t in timestamps if now - t < WS_RATE_LIMIT_WINDOW]
+        # Check burst rate (last second)
+        recent = [t for t in timestamps if now - t < 1.0]
+        if len(recent) >= WS_RATE_LIMIT_PER_SEC:
+            return False
+        # Check sustained rate (per minute)
+        if len(timestamps) >= WS_RATE_LIMIT_PER_MIN:
+            return False
+        timestamps.append(now)
+        self._msg_timestamps[session_id] = timestamps
+        return True
 
     async def send_json(self, session_id: str, data: dict) -> None:
         ws = self.active_connections.get(session_id)
@@ -84,8 +111,25 @@ async def websocket_chat(websocket: WebSocket):
 
     try:
         while True:
-            # Receive message
+            # Receive message with size limit
             raw = await websocket.receive_text()
+            if len(raw) > WS_MAX_MESSAGE_SIZE:
+                await manager.send_json(session_id, {
+                    "type": "error",
+                    "message": f"Message trop volumineux ({len(raw)} octets, max {WS_MAX_MESSAGE_SIZE}).",
+                    "expression": "surprised",
+                })
+                continue
+
+            # Rate limiting
+            if not manager.check_rate_limit(session_id):
+                await manager.send_json(session_id, {
+                    "type": "error",
+                    "message": "Trop de messages envoyés. Veuillez patienter quelques secondes.",
+                    "expression": "surprised",
+                })
+                continue
+
             try:
                 data = json.loads(raw)
             except json.JSONDecodeError:

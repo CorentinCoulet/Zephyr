@@ -51,6 +51,11 @@ COPY --from=frontend-build /app/zephyr_ui/dist zephyr_ui/dist
 # Create directories
 RUN mkdir -p reports screenshots baselines
 
+# Non-root user for security
+RUN useradd -r -s /bin/false zephyr && \
+    chown -R zephyr:zephyr /app
+USER zephyr
+
 # Environment
 ENV ZEPHYR_HOST=0.0.0.0
 ENV ZEPHYR_PORT=8000

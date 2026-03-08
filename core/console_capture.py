@@ -3,10 +3,13 @@ Console Capture — Intercepts and structures browser console output.
 Captures errors, warnings, uncaught exceptions, and promise rejections.
 """
 
+import logging
 from dataclasses import dataclass, field
 from typing import Optional
 
 from playwright.async_api import Page, ConsoleMessage as PWConsoleMessage
+
+logger = logging.getLogger("zephyr.core.console")
 
 
 @dataclass

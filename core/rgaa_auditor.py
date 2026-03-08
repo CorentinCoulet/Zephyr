@@ -19,11 +19,14 @@ Checks cover the 13 themes of RGAA 4.1:
 Uses Playwright JS injection to analyze the live DOM.
 """
 
+import logging
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 
 from playwright.async_api import Page
+
+logger = logging.getLogger("zephyr.core.rgaa")
 
 
 class RGAAConformance(str, Enum):
@@ -905,6 +908,7 @@ class RGAAAuditor:
     """Automated RGAA 4.1 accessibility auditor using Playwright JS injection."""
 
     async def audit(self, page: Page, url: str = "") -> RGAAReport:
+        logger.info("Starting RGAA 4.1 audit for %s", url or page.url)
         """Run all RGAA 4.1 criteria checks on the given page."""
         report = RGAAReport(url=url or page.url)
 

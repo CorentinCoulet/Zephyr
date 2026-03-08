@@ -115,11 +115,12 @@ async def _cleanup():
 def _sync_cleanup():
     """Synchronous wrapper for atexit."""
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
+        try:
+            loop = asyncio.get_running_loop()
             loop.create_task(_cleanup())
-        else:
-            loop.run_until_complete(_cleanup())
+        except RuntimeError:
+            # No running loop — create one for cleanup
+            asyncio.run(_cleanup())
     except Exception:
         pass
 
@@ -174,8 +175,10 @@ async def capture_screenshot(
     vp = VIEWPORTS.get(viewport, VIEWPORTS["desktop"])
     page = await browser.navigate(url, viewport=vp)
 
-    screenshot_bytes = await browser.screenshot(page, full_page=full_page)
-    await page.close()
+    try:
+        screenshot_bytes = await browser.screenshot(page, full_page=full_page)
+    finally:
+        await page.close()
 
     b64 = base64.b64encode(screenshot_bytes).decode("utf-8")
 
@@ -223,8 +226,10 @@ async def capture_multi_viewport(
             continue
 
         page = await browser.navigate(url, viewport=vp)
-        screenshot_bytes = await browser.screenshot(page, full_page=True)
-        await page.close()
+        try:
+            screenshot_bytes = await browser.screenshot(page, full_page=True)
+        finally:
+            await page.close()
 
         results[vp_name] = {
             "resolution": f"{vp.width}x{vp.height}",
@@ -268,45 +273,47 @@ async def analyze_dom(
     page = await browser.navigate(url)
     result = {"url": url}
 
-    # DOM tree
-    tree = await dom.extract_full(page)
-    result["dom_tree"] = tree
+    try:
+        # DOM tree
+        tree = await dom.extract_full(page)
+        result["dom_tree"] = tree
 
-    # Interactive elements
-    if include_interactive:
-        elems = await dom.extract_interactive_elements(page)
-        result["interactive_elements"] = [
-            {"tag": e.tag, "text": e.text[:100], "selector": e.selector,
-             "type": e.type, "href": e.href, "visible": e.is_visible,
-             "enabled": e.is_enabled}
-            for e in elems[:50]
-        ]
-        result["interactive_count"] = len(elems)
+        # Interactive elements
+        if include_interactive:
+            elems = await dom.extract_interactive_elements(page)
+            result["interactive_elements"] = [
+                {"tag": e.tag, "text": e.text[:100], "selector": e.selector,
+                 "type": e.type, "href": e.href, "visible": e.is_visible,
+                 "enabled": e.is_enabled}
+                for e in elems[:50]
+            ]
+            result["interactive_count"] = len(elems)
 
-    # Forms
-    if include_forms:
-        forms = await dom.extract_forms(page)
-        result["forms"] = [
-            {"action": f.action, "method": f.method,
-             "fields": [{"name": ff.name, "type": ff.type, "label": ff.label,
-                          "required": ff.required, "placeholder": ff.placeholder}
-                         for ff in f.fields]}
-            for f in forms
-        ]
+        # Forms
+        if include_forms:
+            forms = await dom.extract_forms(page)
+            result["forms"] = [
+                {"action": f.action, "method": f.method,
+                 "fields": [{"name": ff.name, "type": ff.type, "label": ff.label,
+                              "required": ff.required, "placeholder": ff.placeholder}
+                             for ff in f.fields]}
+                for f in forms
+            ]
 
-    # Navigation
-    if include_navigation:
-        nav = await dom.extract_navigation(page)
-        result["navigation"] = [
-            {"text": n.text, "href": n.href, "active": n.is_active}
-            for n in nav
-        ]
+        # Navigation
+        if include_navigation:
+            nav = await dom.extract_navigation(page)
+            result["navigation"] = [
+                {"text": n.text, "href": n.href, "active": n.is_active}
+                for n in nav
+            ]
 
-    # Page info
-    result["title"] = await page.title()
-    result["page_url"] = page.url
+        # Page info
+        result["title"] = await page.title()
+        result["page_url"] = page.url
+    finally:
+        await page.close()
 
-    await page.close()
     return json.dumps(result, default=str)
 
 
@@ -339,17 +346,18 @@ async def get_console_errors(
     console_cap.attach(page)
     await console_cap.capture_unhandled_rejections(page)
 
-    # Wait for async errors
-    await asyncio.sleep(wait_ms / 1000)
-    await console_cap.collect_rejections(page)
+    try:
+        # Wait for async errors
+        await asyncio.sleep(wait_ms / 1000)
+        await console_cap.collect_rejections(page)
 
-    errors = [e.to_dict() for e in console_cap.get_errors()]
-    warnings = [w.to_dict() for w in console_cap.get_warnings()] if include_warnings else []
-    network_errors = [e.to_dict() for e in browser.get_network_errors()]
-
-    console_cap.clear()
-    browser.clear_captures()
-    await page.close()
+        errors = [e.to_dict() for e in console_cap.get_errors()]
+        warnings = [w.to_dict() for w in console_cap.get_warnings()] if include_warnings else []
+        network_errors = [e.to_dict() for e in browser.get_network_errors()]
+    finally:
+        console_cap.clear()
+        browser.clear_captures()
+        await page.close()
 
     result = {
         "url": url,
@@ -441,32 +449,33 @@ async def check_accessibility(url: str) -> str:
 
     page = await browser.navigate(url)
 
-    # Contrast
-    contrast = await dom.check_contrast(page)
-    contrast_issues = [
-        {"selector": c.selector, "text": c.text[:80],
-         "ratio": round(c.ratio, 2), "required": c.required_ratio,
-         "level": c.level, "fg": c.foreground, "bg": c.background}
-        for c in contrast
-    ]
+    try:
+        # Contrast
+        contrast = await dom.check_contrast(page)
+        contrast_issues = [
+            {"selector": c.selector, "text": c.text[:80],
+             "ratio": round(c.ratio, 2), "required": c.required_ratio,
+             "level": c.level, "fg": c.foreground, "bg": c.background}
+            for c in contrast
+        ]
 
-    # Overflow
-    overflow = await dom.detect_overflow(page)
-    overflow_issues = [
-        {"selector": o.selector, "overflow_x": round(o.overflow_x, 1),
-         "overflow_y": round(o.overflow_y, 1)}
-        for o in overflow
-    ]
+        # Overflow
+        overflow = await dom.detect_overflow(page)
+        overflow_issues = [
+            {"selector": o.selector, "overflow_x": round(o.overflow_x, 1),
+             "overflow_y": round(o.overflow_y, 1)}
+            for o in overflow
+        ]
 
-    # Enhanced accessibility audit
-    a11y = await dom.check_accessibility(page)
-    a11y_issues = [
-        {"type": a.type, "selector": a.selector, "tag": a.element_tag,
-         "text": a.text[:80], "details": a.details, "severity": a.severity}
-        for a in a11y
-    ]
-
-    await page.close()
+        # Enhanced accessibility audit
+        a11y = await dom.check_accessibility(page)
+        a11y_issues = [
+            {"type": a.type, "selector": a.selector, "tag": a.element_tag,
+             "text": a.text[:80], "details": a.details, "severity": a.severity}
+            for a in a11y
+        ]
+    finally:
+        await page.close()
 
     total = len(contrast_issues) + len(overflow_issues) + len(a11y_issues)
     return json.dumps({
@@ -527,93 +536,94 @@ async def full_page_analysis(
         "resolution": f"{vp.width}x{vp.height}",
     }
 
-    # Page info
-    result["title"] = await page.title()
+    try:
+        # Page info
+        result["title"] = await page.title()
 
-    # Screenshot
-    if include_screenshot:
-        screenshot_bytes = await browser.screenshot(page, full_page=True)
-        result["screenshot_base64"] = base64.b64encode(screenshot_bytes).decode("utf-8")
+        # Screenshot
+        if include_screenshot:
+            screenshot_bytes = await browser.screenshot(page, full_page=True)
+            result["screenshot_base64"] = base64.b64encode(screenshot_bytes).decode("utf-8")
 
-    # DOM analysis
-    interactive = await dom.extract_interactive_elements(page)
-    result["interactive_elements"] = [
-        {"tag": e.tag, "text": e.text[:80], "selector": e.selector,
-         "visible": e.is_visible, "enabled": e.is_enabled}
-        for e in interactive[:40]
-    ]
+        # DOM analysis
+        interactive = await dom.extract_interactive_elements(page)
+        result["interactive_elements"] = [
+            {"tag": e.tag, "text": e.text[:80], "selector": e.selector,
+             "visible": e.is_visible, "enabled": e.is_enabled}
+            for e in interactive[:40]
+        ]
 
-    forms = await dom.extract_forms(page)
-    result["forms"] = [
-        {"action": f.action, "method": f.method,
-         "fields": [{"name": ff.name, "type": ff.type, "label": ff.label}
-                     for ff in f.fields]}
-        for f in forms
-    ]
+        forms = await dom.extract_forms(page)
+        result["forms"] = [
+            {"action": f.action, "method": f.method,
+             "fields": [{"name": ff.name, "type": ff.type, "label": ff.label}
+                         for ff in f.fields]}
+            for f in forms
+        ]
 
-    nav = await dom.extract_navigation(page)
-    result["navigation"] = [
-        {"text": n.text, "href": n.href, "active": n.is_active}
-        for n in nav
-    ]
+        nav = await dom.extract_navigation(page)
+        result["navigation"] = [
+            {"text": n.text, "href": n.href, "active": n.is_active}
+            for n in nav
+        ]
 
-    # Accessibility
-    contrast = await dom.check_contrast(page)
-    result["contrast_issues"] = [
-        {"selector": c.selector, "text": c.text[:60], "ratio": round(c.ratio, 2)}
-        for c in contrast[:10]
-    ]
+        # Accessibility
+        contrast = await dom.check_contrast(page)
+        result["contrast_issues"] = [
+            {"selector": c.selector, "text": c.text[:60], "ratio": round(c.ratio, 2)}
+            for c in contrast[:10]
+        ]
 
-    overflow = await dom.detect_overflow(page)
-    result["overflow_issues"] = [
-        {"selector": o.selector, "overflow_x": round(o.overflow_x, 1),
-         "overflow_y": round(o.overflow_y, 1)}
-        for o in overflow[:10]
-    ]
+        overflow = await dom.detect_overflow(page)
+        result["overflow_issues"] = [
+            {"selector": o.selector, "overflow_x": round(o.overflow_x, 1),
+             "overflow_y": round(o.overflow_y, 1)}
+            for o in overflow[:10]
+        ]
 
-    # Enhanced accessibility
-    a11y = await dom.check_accessibility(page)
-    result["accessibility_issues"] = [
-        {"type": a.type, "selector": a.selector, "details": a.details, "severity": a.severity}
-        for a in a11y[:15]
-    ]
+        # Enhanced accessibility
+        a11y = await dom.check_accessibility(page)
+        result["accessibility_issues"] = [
+            {"type": a.type, "selector": a.selector, "details": a.details, "severity": a.severity}
+            for a in a11y[:15]
+        ]
 
-    # Framework detection
-    result["framework"] = await dom.detect_framework(page)
+        # Framework detection
+        result["framework"] = await dom.detect_framework(page)
 
-    # Console
-    await asyncio.sleep(1)
-    await console_cap.collect_rejections(page)
-    result["console_errors"] = [e.to_dict() for e in console_cap.get_errors()]
-    result["console_warnings"] = [w.to_dict() for w in console_cap.get_warnings()]
-    result["network_errors"] = [e.to_dict() for e in browser.get_network_errors()]
+        # Console
+        await asyncio.sleep(1)
+        await console_cap.collect_rejections(page)
+        result["console_errors"] = [e.to_dict() for e in console_cap.get_errors()]
+        result["console_warnings"] = [w.to_dict() for w in console_cap.get_warnings()]
+        result["network_errors"] = [e.to_dict() for e in browser.get_network_errors()]
 
-    # Performance (optional)
-    if include_perf:
-        try:
-            perf = await _get_perf()
-            report = await perf.run_audit(url)
-            if "error" not in report:
-                scores = perf.extract_scores(report)
-                result["performance"] = scores.to_dict() if hasattr(scores, 'to_dict') else scores
-        except Exception:
-            result["performance"] = {"error": "Lighthouse not available"}
+        # Performance (optional)
+        if include_perf:
+            try:
+                perf = await _get_perf()
+                report = await perf.run_audit(url)
+                if "error" not in report:
+                    scores = perf.extract_scores(report)
+                    result["performance"] = scores.to_dict() if hasattr(scores, 'to_dict') else scores
+            except Exception:
+                result["performance"] = {"error": "Lighthouse not available"}
 
-    # Summary
-    issues = (len(result.get("console_errors", [])) +
-              len(result.get("network_errors", [])) +
-              len(result.get("contrast_issues", [])) +
-              len(result.get("overflow_issues", [])) +
-              len(result.get("accessibility_issues", [])))
-    result["issues_total"] = issues
-    result["summary"] = (
-        f"Page '{result['title']}' — {len(result['interactive_elements'])} éléments interactifs, "
-        f"{len(result['forms'])} formulaire(s), {issues} problème(s) détecté(s)."
-    )
-
-    console_cap.clear()
-    browser.clear_captures()
-    await page.close()
+        # Summary
+        issues = (len(result.get("console_errors", [])) +
+                  len(result.get("network_errors", [])) +
+                  len(result.get("contrast_issues", [])) +
+                  len(result.get("overflow_issues", [])) +
+                  len(result.get("accessibility_issues", [])))
+        result["issues_total"] = issues
+        result["summary"] = (
+            f"Page '{result['title']}' — {len(result['interactive_elements'])} éléments interactifs, "
+            f"{len(result['forms'])} formulaire(s), {issues} problème(s) détecté(s)."
+        )
+    finally:
+        console_cap.clear()
+        browser.clear_captures()
+        await page.close()
 
     return json.dumps(result, default=str)
 
@@ -651,8 +661,10 @@ async def compare_visual(
     browser = await _get_browser()
     vp = VIEWPORTS.get(viewport, VIEWPORTS["desktop"])
     page = await browser.navigate(url, viewport=vp)
-    screenshot_bytes = await browser.screenshot(page, full_page=True)
-    await page.close()
+    try:
+        screenshot_bytes = await browser.screenshot(page, full_page=True)
+    finally:
+        await page.close()
 
     differ = VisualDiff()
 
@@ -750,8 +762,9 @@ async def interact_with_page(
     except Exception as e:
         result["success"] = False
         result["error"] = str(e)
+    finally:
+        await page.close()
 
-    await page.close()
     return json.dumps(result, default=str)
 
 
@@ -779,28 +792,30 @@ async def inspect_storage(
     dom = await _get_dom()
 
     page = await browser.navigate(url)
-    storage = await dom.inspect_storage(page)
 
-    result = {
-        "url": url,
-        "local_storage": storage.local_storage,
-        "local_storage_count": len(storage.local_storage),
-        "session_storage": storage.session_storage,
-        "session_storage_count": len(storage.session_storage),
-    }
+    try:
+        storage = await dom.inspect_storage(page)
 
-    if include_cookies:
-        result["cookies"] = storage.cookies
-        result["cookies_count"] = len(storage.cookies)
+        result = {
+            "url": url,
+            "local_storage": storage.local_storage,
+            "local_storage_count": len(storage.local_storage),
+            "session_storage": storage.session_storage,
+            "session_storage_count": len(storage.session_storage),
+        }
 
-    total = len(storage.local_storage) + len(storage.session_storage) + len(storage.cookies)
-    result["summary"] = (
-        f"{len(storage.local_storage)} localStorage, "
-        f"{len(storage.session_storage)} sessionStorage, "
-        f"{len(storage.cookies)} cookies"
-    )
+        if include_cookies:
+            result["cookies"] = storage.cookies
+            result["cookies_count"] = len(storage.cookies)
 
-    await page.close()
+        total = len(storage.local_storage) + len(storage.session_storage) + len(storage.cookies)
+        result["summary"] = (
+            f"{len(storage.local_storage)} localStorage, "
+            f"{len(storage.session_storage)} sessionStorage, "
+            f"{len(storage.cookies)} cookies"
+        )
+    finally:
+        await page.close()
     return json.dumps(result, default=str)
 
 
@@ -832,14 +847,12 @@ async def capture_element_screenshot(
     try:
         element = await page.query_selector(selector)
         if not element:
-            await page.close()
             return json.dumps({"error": f"Element '{selector}' not found", "url": url})
 
         screenshot_bytes = await element.screenshot()
         b64 = base64.b64encode(screenshot_bytes).decode("utf-8")
 
         box = await element.bounding_box()
-        await page.close()
 
         return json.dumps({
             "status": "ok",
@@ -850,8 +863,9 @@ async def capture_element_screenshot(
             "size_bytes": len(screenshot_bytes),
         })
     except Exception as e:
-        await page.close()
         return json.dumps({"error": str(e), "url": url, "selector": selector})
+    finally:
+        await page.close()
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -879,14 +893,15 @@ async def network_waterfall(
     browser = await _get_browser()
     page = await browser.navigate(url)
 
-    # Wait for additional async requests
-    await asyncio.sleep(wait_ms / 1000)
+    try:
+        # Wait for additional async requests
+        await asyncio.sleep(wait_ms / 1000)
 
-    waterfall = browser.get_network_waterfall()
-    waterfall["url"] = url
-
-    browser.clear_captures()
-    await page.close()
+        waterfall = browser.get_network_waterfall()
+        waterfall["url"] = url
+    finally:
+        browser.clear_captures()
+        await page.close()
 
     return json.dumps(waterfall, default=str)
 
@@ -932,7 +947,7 @@ async def run_interaction_sequence(
     nav_steps = [
         NavigationStep(
             action=s.get("action", "click"),
-            selector=s.get("selector", ""),
+            selector=_sanitize_selector(s.get("selector", "")),
             value=s.get("value", ""),
             url=s.get("url", ""),
             wait_ms=s.get("wait_ms", 0),
@@ -941,29 +956,31 @@ async def run_interaction_sequence(
         for s in step_list
     ]
 
-    results = await runner.navigate_sequence(page, nav_steps)
-    output = {
-        "url": url,
-        "total_steps": len(nav_steps),
-        "completed_steps": sum(1 for r in results if r.success),
-        "steps": [],
-    }
+    try:
+        results = await runner.navigate_sequence(page, nav_steps)
+        output = {
+            "url": url,
+            "total_steps": len(nav_steps),
+            "completed_steps": sum(1 for r in results if r.success),
+            "steps": [],
+        }
 
-    for i, result in enumerate(results):
-        step_data = result.to_dict()
-        step_data["step_number"] = i + 1
-        if screenshot_each_step and result.success:
-            try:
-                ss = await browser.screenshot(page, full_page=True)
-                step_data["screenshot_base64"] = base64.b64encode(ss).decode("utf-8")
-            except Exception:
-                pass
-        output["steps"].append(step_data)
+        for i, result in enumerate(results):
+            step_data = result.to_dict()
+            step_data["step_number"] = i + 1
+            if screenshot_each_step and result.success:
+                try:
+                    ss = await browser.screenshot(page, full_page=True)
+                    step_data["screenshot_base64"] = base64.b64encode(ss).decode("utf-8")
+                except Exception:
+                    pass
+            output["steps"].append(step_data)
 
-    output["final_url"] = page.url
-    output["final_title"] = await page.title()
+        output["final_url"] = page.url
+        output["final_title"] = await page.title()
+    finally:
+        await page.close()
 
-    await page.close()
     return json.dumps(output, default=str)
 
 
@@ -1050,9 +1067,12 @@ async def detect_framework(url: str) -> str:
     dom = await _get_dom()
 
     page = await browser.navigate(url)
-    result = await dom.detect_framework(page)
-    result["url"] = url
-    await page.close()
+
+    try:
+        result = await dom.detect_framework(page)
+        result["url"] = url
+    finally:
+        await page.close()
 
     return json.dumps(result, default=str)
 
@@ -1082,8 +1102,11 @@ async def search_page_content(
     dom = await _get_dom()
 
     page = await browser.navigate(url)
-    results = await dom.search_text(page, query)
-    await page.close()
+
+    try:
+        results = await dom.search_text(page, query)
+    finally:
+        await page.close()
 
     return json.dumps({
         "url": url,

@@ -42,17 +42,27 @@ async def serve_widget_js():
 
 
 @router.get("/sdk/snippet")
-async def widget_snippet():
-    """Returns a ready-to-paste HTML snippet for embedding the widget."""
+async def widget_snippet(x_api_key: str = Header(None)):
+    """Returns a ready-to-paste HTML snippet for embedding the widget.
+
+    If an API key is configured, the caller must authenticate to receive
+    the snippet (the key is masked in the output — replace the placeholder).
+    """
+    _validate_api_key(x_api_key)
     base = settings.widget_base_url or f"http://{settings.host}:{settings.port}"
-    api_key = settings.widget_api_key or ""
+
+    # Never expose the real API key in public output
+    api_key_display = "YOUR_API_KEY_HERE"
+    if settings.widget_api_key:
+        # Show only last 4 chars as hint
+        api_key_display = "***" + settings.widget_api_key[-4:]
 
     html = f"""<!-- 🦊 Zephyr Widget -->
 <script src="{base}/api/sdk/zephyr-widget.js"></script>
 <script>
   ZephyrWidget.init({{
     server: '{base}',
-    apiKey: '{api_key}',
+    apiKey: '{api_key_display}',
     persona: 'minimal',     // "mascot" | "spirit" | "minimal" | "futuristic"
     theme: 'auto',           // "dark" | "light" | "auto"
     position: 'bottom-right',// "bottom-right" | "bottom-left" | "top-right" | "top-left"

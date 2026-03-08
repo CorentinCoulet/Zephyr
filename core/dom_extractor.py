@@ -3,10 +3,13 @@ DOM Extractor — Extracts structured, simplified representations of the DOM.
 Provides element analysis, form detection, bounding boxes, contrast checks, etc.
 """
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from playwright.async_api import Page
+
+logger = logging.getLogger("zephyr.core.dom")
 
 
 @dataclass
@@ -288,7 +291,7 @@ class DOMExtractor:
     }
     """
 
-    _JS_CHECK_CONTRAST = """
+    _JS_CHECK_CONTRAST = r"""
     () => {
         function getLuminance(r, g, b) {
             const [rs, gs, bs] = [r, g, b].map(c => {
@@ -523,6 +526,7 @@ class DOMExtractor:
 
     async def extract_full(self, page: Page) -> dict:
         """Extract full simplified DOM tree."""
+        logger.debug("Extracting full DOM tree")
         return await page.evaluate(self._JS_EXTRACT_DOM)
 
     async def extract_interactive_elements(
@@ -530,6 +534,7 @@ class DOMExtractor:
     ) -> list[InteractiveElement]:
         """Extract all interactive elements from the page."""
         raw = await page.evaluate(self._JS_EXTRACT_INTERACTIVE)
+        logger.debug("Found %d interactive elements", len(raw))
         return [InteractiveElement(**item) for item in raw]
 
     async def extract_forms(self, page: Page) -> list[FormInfo]:

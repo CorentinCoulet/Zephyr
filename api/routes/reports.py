@@ -187,11 +187,6 @@ def _render_markdown(data: dict, session) -> str:
 def _render_html(data: dict, session) -> str:
     """Render a session report as HTML (XSS-safe)."""
     md = _render_markdown(data, session)
-    # Simple markdown-to-html conversion
-    html_body = md
-    html_body = html_body.replace("# 🦊", "<h1>🦊")
-    html_body = html_body.replace("\n## ", "\n<h2>")
-    html_body = html_body.replace("\n### ", "\n<h3>")
 
     # Sanitize user-controlled content to prevent XSS
     safe_mode = html_escape_mod.escape(data['mode'])

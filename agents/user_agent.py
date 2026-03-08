@@ -23,15 +23,17 @@ def _load_prompt(name: str) -> str:
 
 SYSTEM_PROMPT = _load_prompt("user_system")
 
-# Onboarding step tracking per session
-_onboarding_progress: dict[str, dict] = {}  # session_id -> {"completed_steps": set, "total_steps": int}
-
 
 class UserAgent(BaseAgent):
     """User-focused navigation guide and assistant."""
 
     agent_name = "user_agent"
     agent_mode = "user"
+
+    def __init__(self):
+        super().__init__()
+        # Per-session onboarding tracking (instance-scoped, not module-global)
+        self._onboarding_progress: dict[str, dict] = {}
 
     def get_system_prompt(self, preferences: Optional[dict] = None) -> str:
         prompt = SYSTEM_PROMPT
@@ -222,7 +224,7 @@ Aide l'utilisateur de manière simple et guidée."""
     async def generate_onboarding(self, context: dict, session_id: str = "default") -> AgentResponse:
         """Generate an onboarding tour for a new user. Tracks progress."""
         # Check if already started
-        progress = _onboarding_progress.get(session_id)
+        progress = self._onboarding_progress.get(session_id)
         if progress and progress.get("completed_steps"):
             completed = progress["completed_steps"]
             total = progress["total_steps"]
@@ -239,25 +241,25 @@ Aide l'utilisateur de manière simple et guidée."""
         response = await self.chat(query, context, session_id)
         # Track total steps
         steps = self._extract_steps(response.message)
-        if session_id not in _onboarding_progress:
-            _onboarding_progress[session_id] = {"completed_steps": set(), "total_steps": len(steps)}
+        if session_id not in self._onboarding_progress:
+            self._onboarding_progress[session_id] = {"completed_steps": set(), "total_steps": len(steps)}
         return response
 
     def mark_onboarding_step(self, session_id: str, step: int | str) -> dict:
         """Mark an onboarding step as completed."""
         step = int(step)  # Normalize to int
-        if session_id not in _onboarding_progress:
-            _onboarding_progress[session_id] = {"completed_steps": set(), "total_steps": 0}
-        _onboarding_progress[session_id]["completed_steps"].add(step)
+        if session_id not in self._onboarding_progress:
+            self._onboarding_progress[session_id] = {"completed_steps": set(), "total_steps": 0}
+        self._onboarding_progress[session_id]["completed_steps"].add(step)
         return {
-            "completed": sorted(_onboarding_progress[session_id]["completed_steps"]),
-            "total": _onboarding_progress[session_id]["total_steps"],
-            "done": len(_onboarding_progress[session_id]["completed_steps"]) >= _onboarding_progress[session_id]["total_steps"] > 0,
+            "completed": sorted(self._onboarding_progress[session_id]["completed_steps"]),
+            "total": self._onboarding_progress[session_id]["total_steps"],
+            "done": len(self._onboarding_progress[session_id]["completed_steps"]) >= self._onboarding_progress[session_id]["total_steps"] > 0,
         }
 
     def get_onboarding_progress(self, session_id: str) -> dict:
         """Get current onboarding progress."""
-        progress = _onboarding_progress.get(session_id, {"completed_steps": set(), "total_steps": 0})
+        progress = self._onboarding_progress.get(session_id, {"completed_steps": set(), "total_steps": 0})
         return {
             "completed": sorted(progress["completed_steps"]),
             "total": progress["total_steps"],
@@ -266,7 +268,7 @@ Aide l'utilisateur de manière simple et guidée."""
 
     def reset_onboarding(self, session_id: str) -> None:
         """Reset onboarding progress for a session."""
-        _onboarding_progress.pop(session_id, None)
+        self._onboarding_progress.pop(session_id, None)
 
     async def explain_element(
         self, selector: str, element_info: dict, context: dict

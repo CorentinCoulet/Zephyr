@@ -159,7 +159,11 @@ async def ci_check(req: CICheckRequest, request: Request):
         checks["contrast"] = {
             "passed": len(contrast_fails) == 0,
             "count": len(contrast_fails),
-            "details": contrast_fails[:5],
+            "details": [
+                {"selector": c.selector, "text": c.text[:80], "ratio": round(c.ratio, 2),
+                 "required": c.required_ratio, "fg": c.foreground, "bg": c.background}
+                for c in contrast_fails[:5]
+            ],
         }
         if contrast_fails:
             all_passed = False

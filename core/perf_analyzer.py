@@ -5,11 +5,14 @@ Runs audits, compares reports, extracts optimisation opportunities.
 
 import asyncio
 import json
+import logging
 import re
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
+
+logger = logging.getLogger("zephyr.core.perf")
 
 
 @dataclass
@@ -84,6 +87,7 @@ class PerfAnalyzer:
         """Run a Lighthouse audit and return the raw JSON report."""
         cfg = config or AuditConfig()
         url = self._validate_lighthouse_url(url)
+        logger.info("Starting Lighthouse audit for %s (form_factor=%s)", url, cfg.form_factor)
 
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
             output_path = tmp.name
@@ -117,9 +121,11 @@ class PerfAnalyzer:
             report_path = Path(output_path)
             report = json.loads(report_path.read_text())
             report_path.unlink(missing_ok=True)
+            logger.info("Lighthouse audit complete for %s", url)
             return report
         except Exception as e:
             # Clean up temp file on failure
+            logger.error("Lighthouse audit failed for %s: %s", url, e)
             Path(output_path).unlink(missing_ok=True)
             return {
                 "error": str(e),

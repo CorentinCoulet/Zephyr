@@ -3,7 +3,7 @@ Guide endpoints — User Agent interactions.
 """
 
 from fastapi import APIRouter, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 
 from api.models.requests import GuideRequest, ChatRequest
@@ -162,14 +162,26 @@ async def chat_user(req: ChatRequest, request: Request):
 
 
 class FrictionRequest(BaseModel):
-    url: str = Field(..., description="Page URL to analyze for friction")
+    url: str = Field(..., description="Page URL to analyze for friction", max_length=2048)
     session_id: Optional[str] = None
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: str) -> str:
+        from api.models.requests import _validate_url
+        return _validate_url(v)
 
 
 class TooltipRequest(BaseModel):
-    url: str = Field(..., description="Page URL to generate tooltips for")
+    url: str = Field(..., description="Page URL to generate tooltips for", max_length=2048)
     max_tooltips: int = Field(10, description="Maximum number of tooltips")
     session_id: Optional[str] = None
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: str) -> str:
+        from api.models.requests import _validate_url
+        return _validate_url(v)
 
 
 class OnboardingStepRequest(BaseModel):

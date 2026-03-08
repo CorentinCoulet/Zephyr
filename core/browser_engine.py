@@ -3,6 +3,7 @@ Browser Engine — Playwright-based headless browser management.
 Handles browser lifecycle, page navigation, screenshot capture, and JS evaluation.
 """
 
+import logging
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -17,6 +18,8 @@ from playwright.async_api import (
 )
 
 from config.settings import settings
+
+logger = logging.getLogger("zephyr.core.browser")
 
 
 class Viewport:
@@ -132,10 +135,12 @@ class BrowserEngine:
         self._console_messages: list[ConsoleMessage] = []
         self._network_errors: list[NetworkError] = []
         self._network_requests: list[NetworkRequest] = []
-        self._request_start_times: dict[str, float] = {}
+        self._request_start_times: dict[int, float] = {}  # id(request) -> start_time
+        self._request_meta: dict[int, tuple[str, str]] = {}  # id(request) -> (url, method)
 
     async def launch(self) -> None:
         """Launch the browser instance."""
+        logger.info("Launching Chromium (headless=%s)", settings.browser_headless)
         self._playwright = await async_playwright().start()
         self._browser = await self._playwright.chromium.launch(
             headless=settings.browser_headless,
@@ -164,7 +169,7 @@ class BrowserEngine:
         vp = viewport.to_dict() if viewport else VIEWPORTS["desktop"].to_dict()
         context = await self._browser.new_context(
             viewport=vp,
-            ignore_https_errors=True,
+            ignore_https_errors=settings.browser_ignore_https_errors,
         )
         self._contexts.append(context)
         return context
@@ -189,11 +194,13 @@ class BrowserEngine:
         page.on("response", self._on_response)
         page.on("requestfailed", self._on_request_failed)
 
+        logger.info("Navigating to %s (wait_until=%s)", url, wait_until)
         await page.goto(
             url,
             wait_until=wait_until,
             timeout=settings.browser_timeout,
         )
+        logger.debug("Navigation complete: %s", url)
         return page
 
     async def screenshot(
@@ -273,6 +280,7 @@ class BrowserEngine:
         self._network_errors.clear()
         self._network_requests.clear()
         self._request_start_times.clear()
+        self._request_meta.clear()
 
     async def evaluate_js(self, page: Page, script: str) -> Any:
         """Evaluate JavaScript on the page and return the result."""
@@ -280,6 +288,7 @@ class BrowserEngine:
 
     async def close(self) -> None:
         """Close all contexts and the browser."""
+        logger.info("Closing browser (%d contexts)", len(self._contexts))
         for context in self._contexts:
             await context.close()
         self._contexts.clear()
@@ -306,14 +315,17 @@ class BrowserEngine:
         )
 
     def _on_request_start(self, request) -> None:
-        """Track request start time for waterfall."""
-        self._request_start_times[request.url + request.method] = time.time()
+        """Track request start time for waterfall. Uses object id for uniqueness."""
+        req_id = id(request)
+        self._request_start_times[req_id] = time.time()
+        self._request_meta[req_id] = (request.url, request.method)
 
     def _on_response(self, response) -> None:
         """Track completed responses including 4xx/5xx."""
         request = response.request
-        key = request.url + request.method
-        start = self._request_start_times.pop(key, None)
+        req_id = id(request)
+        start = self._request_start_times.pop(req_id, None)
+        self._request_meta.pop(req_id, None)
         timing_ms = (time.time() - start) * 1000 if start else 0
 
         headers = {}
@@ -346,8 +358,9 @@ class BrowserEngine:
             )
 
     def _on_request_failed(self, request) -> None:
-        key = request.url + request.method
-        start = self._request_start_times.pop(key, None)
+        req_id = id(request)
+        start = self._request_start_times.pop(req_id, None)
+        self._request_meta.pop(req_id, None)
         timing_ms = (time.time() - start) * 1000 if start else 0
 
         self._network_errors.append(

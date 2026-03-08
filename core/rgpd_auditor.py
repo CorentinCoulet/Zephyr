@@ -13,11 +13,14 @@ Uses Playwright to interact with the live page and inspect network activity,
 cookies, localStorage, and DOM content.
 """
 
+import logging
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 
 from playwright.async_api import Page, BrowserContext
+
+logger = logging.getLogger("zephyr.core.rgpd")
 
 
 class RGPDSeverity(str, Enum):
@@ -482,16 +485,17 @@ class RGPDAuditor:
 
     async def audit(self, page: Page, url: str = "", context: Optional[BrowserContext] = None) -> RGPDReport:
         """Run all RGPD compliance checks on the given page."""
+        logger.info("Starting RGPD audit for %s", url or page.url)
         report = RGPDReport(url=url or page.url)
 
         # 1. Cookie analysis
         await self._check_cookies(page, context, report)
 
-        # 2. Consent banner
-        await self._check_consent_banner(page, report)
-
-        # 3. Third-party trackers
+        # 2. Third-party trackers (must run BEFORE consent banner check)
         await self._check_trackers(page, report)
+
+        # 3. Consent banner (uses both cookies and trackers data)
+        await self._check_consent_banner(page, report)
 
         # 4. Privacy policy and legal pages
         await self._check_privacy_links(page, report)
@@ -503,6 +507,7 @@ class RGPDAuditor:
         await self._check_local_storage(page, report)
 
         report.compute_stats()
+        logger.info("RGPD audit complete: conforme=%d, non_conforme=%d, checks=%d", report.conforme, report.non_conforme, len(report.checks))
         return report
 
     # ─── Cookie analysis ──────────────────────────────────────

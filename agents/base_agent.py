@@ -61,8 +61,12 @@ class BaseAgent(ABC):
         self._provider: LLMProviderBase = get_provider()
         self._server_config = get_server_config()
 
+    def clear_session(self, session_id: str) -> None:
+        """Remove conversation history for a session."""
+        self._conversations.pop(session_id, None)
+
     @abstractmethod
-    def get_system_prompt(self) -> str:
+    def get_system_prompt(self, preferences: Optional[dict] = None) -> str:
         """Return the system prompt for this agent."""
         ...
 
@@ -127,14 +131,11 @@ class BaseAgent(ABC):
             max_tokens=max_tokens,
         )
 
+    async def close(self) -> None:
+        """Cleanup resources."""
+        self._conversations.clear()
+        await self._provider.close()
+
     def get_conversation(self, session_id: str) -> list[AgentMessage]:
         """Get the conversation history for a session."""
         return self._conversations.get(session_id, [])
-
-    def clear_session(self, session_id: str) -> None:
-        """Clear a conversation session."""
-        self._conversations.pop(session_id, None)
-
-    async def close(self) -> None:
-        """Clean up resources."""
-        await self._provider.close()
